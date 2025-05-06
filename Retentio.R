@@ -107,15 +107,15 @@ server <- function(input, output, session) {
     if (input$main_tabs == "Tenax") {
       # 🧠 Sidebar pour le premier onglet
       tagList(
-        fileInput("file_upload_combined", "📂 Charger vos fichiers Tenax (.xlsx ou .csv formaté)", 
+        fileInput("file_upload_combined", "🧭 Charger vos fichiers Tenax (.xlsx ou .csv formaté)", 
                   accept = c(".xlsx", ".csv"), multiple = TRUE),
         shinyDirButton("tenax_dir", "📁 Choisir dossier Tenax", "Sélectionner dossier Tenax"),
-        downloadButton("tenax_export", "Fichier formaté Tenax"),
+        downloadButton("tenax_export", "Fichier formaté Tenax 💾"),
         tags$br(), tags$br(),
         tags$hr(),
         uiOutput("sheet_selector"),
-        actionButton("refresh", "Rafraîchir les données"),
-        actionButton("reset", "Réinitialiser les filtres"),
+        actionButton("refresh", "✨Rafraîchir les données"),
+        actionButton("reset", "✨Réinitialiser les filtres"),
         tags$hr(),
         h4("Filtres"),
         pickerInput("analyte", "Choisir un composé :", choices = NULL, multiple = FALSE, options = list(`live-search` = TRUE)),
@@ -126,6 +126,8 @@ server <- function(input, output, session) {
                       options = list(`actions-box` = TRUE, `live-search` = TRUE))
         ),
         checkboxInput("flag_only", "Voir uniquement les anomalies", value = FALSE),
+        
+        
         tags$hr(),
         h4("Thème"),
         switchInput("dark_mode", label = NULL, onLabel = "🌙", offLabel = "☀️", value = FALSE)
@@ -134,16 +136,16 @@ server <- function(input, output, session) {
     } else if (input$main_tabs == "Plasma") {
       # 🧠 Sidebar du second onglet → tu peux dupliquer OU créer des filtres différents ici
       tagList(
-        fileInput("file_upload2", "Ajouter vos fichiers (.xlsx ou .csv)", accept = c(".xlsx", ".csv"), multiple = TRUE),
+        fileInput("file_upload2", "🧭 Ajouter vos fichiers (.xlsx ou .csv)", accept = c(".xlsx", ".csv"), multiple = TRUE),
         shinyDirButton("dir_plasma", "📁 Choisir dossier Plasma", "Sélectionner dossier Plasma"),
-        downloadButton("download_plasma", "Fichier formaté Plasma"),
+        downloadButton("download_plasma", "Fichier formaté Plasma 💾"),
         tags$hr(style = "border-top: 1px solid white;"),  # 👈 ligne blanche immédiatement après
-        actionButton("refresh2", "Rafraîchir les données"),
-        actionButton("reset2", "Réinitialiser les filtres"),
+        actionButton("refresh2", "✨Rafraîchir les données"),
+        actionButton("reset2", "✨Réinitialiser les filtres"),
         tags$hr(),
         h4("Filtres"),
         pickerInput("analyte2", "Choisir un composé :", choices = NULL, multiple = FALSE, options = list(`live-search` = TRUE)),
-        pickerInput("multi_analytes2", "Sélection multiple :", choices = NULL, multiple = TRUE, selected = NULL, options = list(`actions-box` = TRUE, `live-search` = TRUE)),
+        pickerInput("multi_analytes2", "Sélection multiple pour Cinétiques multi-composés :", choices = NULL, multiple = TRUE, selected = NULL, options = list(`actions-box` = TRUE, `live-search` = TRUE)),
         checkboxInput("flag_only2", "Voir uniquement les anomalies", value = FALSE),
         tags$hr(),
         h4("Thème"),
@@ -503,8 +505,21 @@ server <- function(input, output, session) {
     
     data_reactive_2(full_data)
     
-    updatePickerInput(session, "analyte2", choices = sort(unique(full_data$Compound)))
-    updatePickerInput(session, "multi_analytes2", choices = sort(unique(full_data$Compound)))
+    # CLASSIFICATION intelligente des composés
+    compounds <- sort(unique(full_data$Compound))
+    choices_grouped <- split(compounds, case_when(
+      str_detect(compounds, "-d\\d+") ~ "Étalon Interne",
+      str_detect(compounds, "^C\\d+") ~ "FAME",
+      TRUE ~ "Analyte"
+    ))
+    
+    
+    #updatePickerInput(session, "analyte2", choices = sort(unique(full_data$Compound)))
+    updatePickerInput(session, "analyte2", choices = choices_grouped, selected = NULL)
+    
+    #updatePickerInput(session, "multi_analytes2", choices = sort(unique(full_data$Compound)))
+    updatePickerInput(session, "multi_analytes2", choices = choices_grouped, selected = NULL)
+    
     updatePickerInput(session, "sequence2", choices = sort(unique(full_data$Sequence)))
     updatePickerInput(session, "type2", selected = "Tous")
     updateCheckboxInput(session, "flag_only2", value = FALSE)
@@ -514,28 +529,72 @@ server <- function(input, output, session) {
 
   
   observeEvent(input$reset, {
-    updatePickerInput(session, "analyte", selected = character(0))
-    updatePickerInput(session, "sequence", selected = character(0))
-    updatePickerInput(session, "type", selected = "Tous")
+    data_reactive(NULL)  # on vide les données
+    data_reactive_1(NULL)
+    
+    output$tenax_summary_plot <- renderPlotly({ NULL })
+    output$tenax_cv_plot <- renderPlotly({ NULL })
+    output$tenax_summary_table <- renderDT({ NULL })
+    
+    
+    updatePickerInput(session, "analyte", selected = character(0), choices = NULL)
+    updatePickerInput(session, "multi_analytes", selected = character(0), choices = NULL)
     updateCheckboxInput(session, "flag_only", value = FALSE)
+    updatePickerInput(session, "sequence", selected = character(0), choices = NULL)
+    updatePickerInput(session, "type", selected = "Tous", choices = c("Tous", "FAME", "Analyte", "Étalon Interne"))
+    updatePickerInput(session, "sequence", selected = character(0), choices = NULL)
+    updatePickerInput(session, "type", selected = "Tous", choices = c("Tous", "FAME", "Analyte", "Étalon Interne"))
+    
+    
+    showNotification("🔁 Onglet Tenax réinitialisé", type = "message")
+    
+    shinyjs::reset("file_upload_combined")
+    
+    
   })
   
+  
   observeEvent(input$reset2, {
-    updatePickerInput(session, "analyte2", selected = character(0))
-    updatePickerInput(session, "sequence2", selected = character(0))
-    updatePickerInput(session, "type2", selected = "Tous")
+    data_reactive_2(NULL)  # vide les données de l'onglet 2
+    
+    updatePickerInput(session, "analyte2", selected = character(0), choices = NULL)
+    updatePickerInput(session, "multi_analytes2", selected = character(0), choices = NULL)
     updateCheckboxInput(session, "flag_only2", value = FALSE)
+    updatePickerInput(session, "sequence2", selected = character(0), choices = NULL)
+    updatePickerInput(session, "type2", selected = "Tous", choices = c("Tous", "FAME", "Analyte", "Étalon Interne"))
+    
+    showNotification("🔁 Onglet Plasma réinitialisé", type = "message")
+    
+    shinyjs::reset("file_upload2")
+    
+    
   })
+  
   
   
   filtered_data <- reactive({
-    req(data_reactive(), input$analyte) #req(data_reactive(), input$analytes) code de base pour la première slide bar
-    data <- data_reactive()
-    df <- data %>% filter(str_to_lower(Compound) == str_to_lower(input$analyte))
+    req(data_reactive(), input$analyte)
+    df <- data_reactive()
+    
+    df <- df %>% filter(str_to_lower(Compound) == str_to_lower(input$analyte))
+    
     if (input$flag_only) df <- df %>% filter(Flagged)
+    
+    # 🎯 Filtrage par séquence
+    if (!is.null(input$sequence) && length(input$sequence) > 0) {
+      df <- df %>% filter(Sequence %in% input$sequence)
+    }
+    
+    # 🎯 Filtrage par type
+    if (!is.null(input$type) && input$type != "Tous") {
+      df <- df %>% filter(Type == input$type)
+    }
+    
     validate(need(nrow(df) > 0, "Aucune donnée disponible avec les filtres actuels."))
     df
   })
+  
+  
   output$cvBox <- renderValueBox({
     df <- filtered_data()
     if (all(is.na(df$CV))) return(valueBox("NA", subtitle = "CV%", color = "aqua"))
@@ -843,31 +902,45 @@ server <- function(input, output, session) {
   outputOptions(output, "showSequenceBox2", suspendWhenHidden = FALSE)
   
   output$multiCVPlot2 <- renderPlotly({
+    req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+    req(input$multi_analytes2)
+    
     df <- data_reactive_2() %>%
       filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(CV)) %>%
       arrange(Date)
+    
     if (nrow(df) == 0) return(NULL)
+    
     p <- ggplot(df, aes(x = Date, y = CV, color = Compound)) +
       geom_line() + geom_point() +
       geom_hline(yintercept = 30, linetype = "dashed", color = "red") +
       theme_minimal() +
       labs(title = "Cinétique des CV (%)", y = "CV (%)", x = "Date") +
       theme(legend.position = "bottom")
+    
     ggplotly(p)
   })
   
+  
   output$multiAreaPlot2 <- renderPlotly({
+    req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+    req(input$multi_analytes2)
+    
     df <- data_reactive_2() %>%
       filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
       arrange(Date)
+    
     if (nrow(df) == 0) return(NULL)
+    
     p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
       geom_line() + geom_point() +
       theme_minimal() +
       labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
       theme(legend.position = "bottom")
+    
     ggplotly(p)
   })
+  
   
   output$downloadCSV2 <- downloadHandler(
     filename = function() paste0("donnees_filtrees_retentio2_", Sys.Date(), ".csv"),
@@ -956,6 +1029,8 @@ server <- function(input, output, session) {
   })
   
   output$CVPlot_time2 <- renderPlotly({
+    req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+    
     df <- filtered_data_2()
     df$Date <- as.Date(df$Date)
     df <- df[order(df$Date), ]
@@ -979,13 +1054,19 @@ server <- function(input, output, session) {
   })
   
   
+  
   output$areaPlot2 <- renderPlotly({
+    req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+    
     df <- filtered_data_2()
     plot_ly(df, x = ~Date, y = ~Area, type = 'scatter', mode = 'lines+markers') %>%
       layout(yaxis = list(title = "Aire"))
   })
   
+  
   output$trendPlot2 <- renderPlotly({
+    req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+    
     df <- filtered_data_2()
     summary <- df %>%
       group_by(Date) %>%
@@ -999,8 +1080,8 @@ server <- function(input, output, session) {
       add_lines(y = ~Mean, name = "Moyenne", line = list(color = "orange")) %>%
       add_lines(y = ~Max, name = "Max", line = list(color = "green")) %>%
       layout(yaxis = list(title = "Tendance des Aires"))
-    
   })
+  
   
   
   # Fonction pour enregistrer le plot Aire log10 en PNG
@@ -1217,6 +1298,18 @@ server <- function(input, output, session) {
     dir_path <- parseDirPath(volumes, input$dir_plasma)
     req(dir_path)
     
+    if (!str_detect(tolower(basename(dir_path)), "plasma")) {
+      showModal(modalDialog(
+        title = "Erreur",
+        div(style = "font-size:18px; color:red; text-align:center;",
+            "❌ Ceci n'est pas un dossier Plasma."),
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+      return()
+    }
+    
+    
     files <- list.files(dir_path, pattern = "\\.csv$", full.names = TRUE)
     if (length(files) == 0) {
       showModal(modalDialog(title = "Erreur", "Aucun fichier CSV trouvé."))
@@ -1279,6 +1372,18 @@ server <- function(input, output, session) {
     tenax_path <- parseDirPath(volumes, input$tenax_dir)
     req(tenax_path)
     
+    if (!str_detect(tolower(basename(tenax_path)), "tenax")) {
+      showModal(modalDialog(
+        title = "Erreur",
+        div(style = "font-size:18px; color:red; text-align:center;",
+            "❌ Ceci n'est pas un dossier Tenax."),
+        easyClose = TRUE,
+        footer = modalButton("OK")
+      ))
+      return()
+    }
+    
+    
     tenax_final <- preprocess_folder_tenax(tenax_path)
     
     if (nrow(tenax_final) == 0) {
@@ -1318,11 +1423,16 @@ server <- function(input, output, session) {
     
     
     output$tenax_summary_table <- renderDT({
+      req(data_reactive())
+      req(nrow(data_reactive()) > 0)
       datatable(df, options = list(scrollX = TRUE, pageLength = 10))
     })
     
     
     output$tenax_summary_plot <- renderPlotly({
+      req(data_reactive())  # ✅ ne fait rien si reset
+      req(nrow(data_reactive()) > 0)
+      
       df_long_sorted <- df_long %>%
         arrange(Compound, Date)
       
@@ -1343,6 +1453,8 @@ server <- function(input, output, session) {
     
     
     output$tenax_cv_plot <- renderPlotly({
+      req(data_reactive())
+      req(nrow(data_reactive()) > 0)
       req(input$tenax_summary_file)
       df <- read_csv2(input$tenax_summary_file$datapath, show_col_types = FALSE)
       
@@ -1421,10 +1533,10 @@ server <- function(input, output, session) {
       
       fluidRow(
         tabBox(title = "Visualisation", width = 12,
-               tabPanel("CV% par séquence", plotlyOutput("CVPlot_time2")),
-               tabPanel("Aires par Date", plotlyOutput("trendPlot2")),
-               tabPanel("Aires par date désordonné", plotlyOutput("areaPlot2")),
-               tabPanel("Cinétiques multi-composés",
+               tabPanel("CV% par séquence📉", plotlyOutput("CVPlot_time2")),
+               tabPanel("Aires par Date📉", plotlyOutput("trendPlot2")),
+               #tabPanel("Aires par date désordonné", plotlyOutput("areaPlot2")), ICI AIRE PAR DATE DESORDONNER
+               tabPanel("Cinétiques multi-composés📊",
                         downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
                         downloadButton("download_area_plot2", "Télécharger Aire (log10) PNG"),
                         plotlyOutput("multiCVPlot2"),
@@ -1501,6 +1613,9 @@ server <- function(input, output, session) {
             message("📄 Fichier résumé Tenax détecté !")
             
             output$tenax_summary_table <- renderDT({
+              req(data_reactive())
+              req(nrow(data_reactive()) > 0)
+              
               datatable(df_test, options = list(scrollX = TRUE, pageLength = 10))
             })
             
@@ -1515,6 +1630,8 @@ server <- function(input, output, session) {
               arrange(Compound, Date)
             
             output$tenax_summary_plot <- renderPlotly({
+              req(data_reactive())
+              req(nrow(data_reactive()) > 0)
               p <- ggplot(df_long, aes(x = DateLabel, y = Area, group = Compound, color = Compound)) +
                 geom_line() +
                 geom_point() +
@@ -1529,6 +1646,9 @@ server <- function(input, output, session) {
             })
             
             output$tenax_cv_plot <- renderPlotly({
+              req(data_reactive())
+              req(nrow(data_reactive()) > 0)
+              
               if (!"CV_Global" %in% colnames(df_test)) {
                 return(plotly_empty(type = "scatter", mode = "markers") %>% 
                          layout(title = "Aucune colonne 'CV_Global' trouvée"))
@@ -1592,7 +1712,13 @@ server <- function(input, output, session) {
     df_flagged <- if ("RT" %in% names(full_data)) flag_anomalies(full_data) else full_data
     data_reactive(df_flagged)
     
+    updatePickerInput(session, "sequence", choices = sort(unique(df_flagged$Sequence)))
+    updatePickerInput(session, "type", selected = "Tous")  # valeurs fixes déjà dans choices
+    
+    
     updatePickerInput(session, "analyte", choices = sort(unique(df_flagged$Compound)))
+    
+    
     updatePickerInput(session, "multi_analytes", choices = unique(df_flagged$Compound))
     
     showNotification("✅ Fichiers Tenax chargés avec succès !", type = "message")
