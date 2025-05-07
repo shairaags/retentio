@@ -510,7 +510,7 @@ server <- function(input, output, session) {
     choices_grouped <- split(compounds, case_when(
       str_detect(compounds, "-d\\d+") ~ "Étalon Interne",
       str_detect(compounds, "^C\\d+") ~ "FAME",
-      TRUE ~ "Analyte"
+      TRUE ~ "FAME"
     ))
     
     
@@ -1734,3 +1734,5 @@ server <- function(input, output, session) {
 
 # ---- APP ----
 shinyApp(ui, server)
+
+#10:30 -> 07/05/2025
