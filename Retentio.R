@@ -99,6 +99,9 @@ server <- function(input, output, session) {
   data_reactive <- reactiveVal()  # ✅ Ajout indispensable
   data_reactive_2 <- reactiveVal()  # pour onglet Retentio 2
   
+  data_plasma_wide <- reactiveVal()
+  
+  
   
   source("qualityChecks.R")
   source("preprocess.R")
@@ -489,6 +492,8 @@ server <- function(input, output, session) {
     files <- input$file_upload2$datapath
     filenames <- input$file_upload2$name
     
+    
+    
     full_data <- tibble()
     
     for (i in seq_along(files)) {
@@ -504,6 +509,11 @@ server <- function(input, output, session) {
     }
     
     data_reactive_2(full_data)
+    
+    if (any(str_detect(names(full_data), "^Area_"))) {
+      data_plasma_wide(full_data)
+    }
+    
     
     # CLASSIFICATION intelligente des composés
     compounds <- sort(unique(full_data$Compound))
@@ -1065,22 +1075,81 @@ server <- function(input, output, session) {
   
   
   output$trendPlot2 <- renderPlotly({
-    req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+    req(input$file_upload2)
     
-    df <- filtered_data_2()
-    summary <- df %>%
-      group_by(Date) %>%
-      summarise(Min = min(Area, na.rm = TRUE),
-                Max = max(Area, na.rm = TRUE),
-                Mean = mean(Area, na.rm = TRUE),
-                .groups = "drop")
+    # 🔍 Lecture brute du fichier chargé (comme le user l’a fourni)
+    filepath <- input$file_upload2$datapath[1]
+    df_raw <- read_csv2(filepath, show_col_types = FALSE)
     
-    plot_ly(summary, x = ~Date) %>%
-      add_lines(y = ~Min, name = "Min", line = list(color = "blue")) %>%
-      add_lines(y = ~Mean, name = "Moyenne", line = list(color = "orange")) %>%
-      add_lines(y = ~Max, name = "Max", line = list(color = "green")) %>%
-      layout(yaxis = list(title = "Tendance des Aires"))
+    # Vérifie la présence de colonnes Max_
+    max_cols <- grep("^Max_", names(df_raw), value = TRUE)
+    if (length(max_cols) == 0) {
+      return(plotly_empty() %>% layout(title = "❌ Les colonnes Max_ n'ont pas été détectées, vérifie l'encodage ou le séparateur CSV."))
+    }
+    
+    # ⚙️ Long format Min / Max / Moyenne
+    df_long <- df_raw %>%
+      filter(Compound == input$analyte2) %>%  # ⬅️ FILTRAGE ajouté ici
+      pivot_longer(cols = -Compound, names_to = "Measure", values_to = "Value") %>%
+      mutate(
+        Stat = case_when(
+          str_starts(Measure, "Min_") ~ "Min",
+          str_starts(Measure, "Max_") ~ "Max",
+          str_starts(Measure, "Area_") ~ "Moyenne",
+          TRUE ~ NA_character_
+        ),
+        Date = str_extract(Measure, "\\d{4}-\\d{2}-\\d{2}")
+      ) %>%
+      filter(!is.na(Stat)) %>%
+      mutate(
+        Date = as.Date(Date),
+        Date = factor(Date, levels = sort(unique(Date))),
+        Value = as.numeric(str_replace(as.character(Value), ",", "."))
+      ) %>%      # ✅ ici le pipe est bien relié à la suite
+      arrange(Compound, Stat, Date)  # 🔁 tri chronologique réel
+    
+    
+    
+    
+      # mutate(
+      #   Date = as.Date(Date),
+      #   Value = as.numeric(str_replace(as.character(Value), ",", "."))
+      # )
+    
+    # 📈 Plotly
+    plot_ly(df_long, x = ~Date, y = ~Value, color = ~Stat, type = "scatter", mode = "lines+markers") %>%
+      layout(
+        title = "Tendances Min / Max / Moyenne des aires",
+        xaxis = list(title = "Date"),
+        yaxis = list(title = "Aire"),
+        legend = list(orientation = "h", x = 0.1, y = 1.1)
+      )
   })
+  
+  
+  
+  
+  
+  
+  
+  
+  # output$trendPlot2 <- renderPlotly({
+  #   req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+  #   
+  #   df <- filtered_data_2()
+  #   summary <- df %>%
+  #     group_by(Date) %>%
+  #     summarise(Min = min(Area, na.rm = TRUE),
+  #               Max = max(Area, na.rm = TRUE),
+  #               Mean = mean(Area, na.rm = TRUE),
+  #               .groups = "drop")
+  #   
+  #   plot_ly(summary, x = ~Date) %>%
+  #     add_lines(y = ~Min, name = "Min", line = list(color = "blue")) %>%
+  #     add_lines(y = ~Mean, name = "Moyenne", line = list(color = "orange")) %>%
+  #     add_lines(y = ~Max, name = "Max", line = list(color = "green")) %>%
+  #     layout(yaxis = list(title = "Tendance des Aires"))
+  # })
   
   
   
@@ -1245,23 +1314,23 @@ server <- function(input, output, session) {
           date_extracted <- str_extract(basename(filepath), "\\d{8}")
           date_formatted <- format(as.Date(date_extracted, "%d%m%Y"), "%Y-%m-%d")
           
-          summarized <- best_hits %>%
+          summarised <- best_hits %>%
             group_by(Compound) %>%
             summarise(
               !!paste0("Area_", date_formatted) := mean(Area, na.rm = TRUE),
               !!paste0("CV_", date_formatted) := sd(Area, na.rm = TRUE) / mean(Area, na.rm = TRUE) * 100,
               .groups = "drop"
             )
-          all_tables[[i]] <- summarized
+          all_tables[[i]] <- summarised
         } else if (all(c("Compound", "Area", "CV") %in% names(df))) {
           date_extracted <- str_extract(basename(filepath), "\\d{8}")
           date_formatted <- format(as.Date(date_extracted, "%d%m%Y"), "%Y-%m-%d")
-          summarized <- df %>%
+          summarised <- df %>%
             rename(
               !!paste0("Area_", date_formatted) := Area,
               !!paste0("CV_", date_formatted) := CV
             )
-          all_tables[[i]] <- summarized
+          all_tables[[i]] <- summarised
         } else {
           all_tables[[i]] <- tibble()
         }
@@ -1333,14 +1402,27 @@ server <- function(input, output, session) {
         date_extracted <- str_extract(basename(filepath), "\\d{8}")
         date_formatted <- format(as.Date(date_extracted, "%d%m%Y"), "%Y-%m-%d")
         
-        summarized <- best_hits %>%
+        summarised <- best_hits %>%
           group_by(Compound) %>%
           summarise(
+            !!paste0("Min_", date_formatted) := min(Area, na.rm = TRUE),
+            !!paste0("Max_", date_formatted) := max(Area, na.rm = TRUE),
             !!paste0("Area_", date_formatted) := mean(Area, na.rm = TRUE),
             !!paste0("CV_", date_formatted) := sd(Area, na.rm = TRUE) / mean(Area, na.rm = TRUE) * 100,
             .groups = "drop"
           )
-        all_tables[[i]] <- summarized
+        
+        
+        
+        
+        # summarized <- best_hits %>%
+        #   group_by(Compound) %>%
+        #   summarise(
+        #     !!paste0("Area_", date_formatted) := mean(Area, na.rm = TRUE),
+        #     !!paste0("CV_", date_formatted) := sd(Area, na.rm = TRUE) / mean(Area, na.rm = TRUE) * 100,
+        #     .groups = "drop"
+        #   )
+        all_tables[[i]] <- summarised
         
         incProgress(1 / total_steps)
       }
@@ -1535,6 +1617,7 @@ server <- function(input, output, session) {
         tabBox(title = "Visualisation", width = 12,
                tabPanel("CV% par séquence📉", plotlyOutput("CVPlot_time2")),
                tabPanel("Aires par Date📉", plotlyOutput("trendPlot2")),
+               
                #tabPanel("Aires par date désordonné", plotlyOutput("areaPlot2")), ICI AIRE PAR DATE DESORDONNER
                tabPanel("Cinétiques multi-composés📊",
                         downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
