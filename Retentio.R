@@ -615,14 +615,22 @@ server <- function(input, output, session) {
     valueBox(cv_moyen, subtitle = "CV%", color = box_color)
   })
   
-  
-
   output$meanBox <- renderValueBox({
     df <- filtered_data()
-    mean_val <- round(mean(df$Area, na.rm = TRUE), 2)
-    formatted <- format(mean_val, decimal.mark = ".", big.mark = "", scientific = FALSE)
+    mean_val <- mean(df$Area, na.rm = TRUE)
+    formatted <- format(mean_val, scientific = TRUE, digits = 3)
     valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
   })
+  
+  
+  
+
+  # output$meanBox <- renderValueBox({
+  #   df <- filtered_data()
+  #   mean_val <- round(mean(df$Area, na.rm = TRUE), 2)
+  #   formatted <- format(mean_val, decimal.mark = ".", big.mark = "", scientific = FALSE)
+  #   valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
+  # })
   
   
   output$nSeqBox <- renderValueBox({
@@ -1015,10 +1023,18 @@ server <- function(input, output, session) {
   
   output$meanBox2 <- renderValueBox({
     df <- filtered_data_2()
-    mean_val <- round(mean(df$Area, na.rm = TRUE), 2)
-    formatted <- format(mean_val, decimal.mark = ".", big.mark = "", scientific = FALSE)
+    mean_val <- mean(df$Area, na.rm = TRUE)
+    formatted <- format(mean_val, scientific = TRUE, digits = 3)
     valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
   })
+  
+  
+  # output$meanBox2 <- renderValueBox({
+  #   df <- filtered_data_2()
+  #   mean_val <- round(mean(df$Area, na.rm = TRUE), 2)
+  #   formatted <- format(mean_val, decimal.mark = ".", big.mark = "", scientific = FALSE)
+  #   valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
+  # })
   
   output$nSeqBox2 <- renderValueBox({
     df <- filtered_data_2()
@@ -1819,3 +1835,4 @@ server <- function(input, output, session) {
 shinyApp(ui, server)
 
 #10:30 -> 07/05/2025
+#14:45 -> 12/05/2025
