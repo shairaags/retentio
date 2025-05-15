@@ -50,7 +50,8 @@ message("🎉 Tous les fichiers valides ont été convertis dans : ", output_dir
 
 
 # 📁 Dossier contenant les fichiers Excel convertis
-input_dir <- "C:/Users/Masspeclab/Desktop/15052025 10h46/Suivi_Els_Tenax_GCxGC/csv_export_excel_fixes"
+input_dir <- "C:/Users/Masspeclab/Desktop/15052025 10h46 et après/Suivi_Els_Tenax_GCxGC"
+
 
 # 📂 Dossier de sortie final
 output_dir <- file.path(input_dir, "csv_export")
@@ -97,3 +98,4 @@ for (file in files) {
 }
 
 message("🎉 Tous les fichiers ont été exportés dans : ", output_dir)
+

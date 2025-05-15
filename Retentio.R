@@ -975,6 +975,43 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
   
+  output$multiAreaPlot2 <- renderPlotly({
+  req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+  req(input$multi_analytes2)
+
+  df <- data_reactive_2() %>%
+    filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
+    arrange(Date)
+
+  if (nrow(df) == 0) return(NULL)
+
+  # ✅ Moyenne globale
+  global_mean <- mean(df$Area, na.rm = TRUE)
+  lim_min <- global_mean / 5
+  lim_max <- global_mean * 5
+
+  # ✅ Flag pour CV > 30%
+  df <- df %>%
+    mutate(Flag_CV = ifelse(is.na(CV), FALSE, CV > 30))
+
+  # 🎨 Graphique ggplot
+  p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+    geom_line() +
+    geom_point(aes(shape = Flag_CV), size = 2) +
+    scale_shape_manual(values = c("FALSE" = 16, "TRUE" = 17)) +  # cercle vs triangle
+    geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
+    geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
+    geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
+    annotate("text", x = max(df$Date), y = global_mean, label = "Moyenne", hjust = 1.1, color = "black", size = 3) +
+    annotate("text", x = max(df$Date), y = lim_max, label = "+5×", hjust = 1.1, color = "red", size = 3) +
+    annotate("text", x = max(df$Date), y = lim_min, label = "÷5", hjust = 1.1, color = "red", size = 3) +
+    theme_minimal() +
+    labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
+    theme(legend.position = "bottom")
+
+  ggplotly(p)
+})
+
   
   output$multiAreaPlot2 <- renderPlotly({
     req(data_reactive_2(), nrow(data_reactive_2()) > 0)
@@ -986,14 +1023,48 @@ server <- function(input, output, session) {
     
     if (nrow(df) == 0) return(NULL)
     
+    # ✅ Moyenne globale toutes valeurs confondues
+    global_mean <- mean(df$Area, na.rm = TRUE)
+    lim_min <- global_mean / 5
+    lim_max <- global_mean * 5
+    
+    # 🎨 Courbe
     p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
-      geom_line() + geom_point() +
+      geom_line() +
+      geom_point() +
+      geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
+      geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
+      geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
       theme_minimal() +
       labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
       theme(legend.position = "bottom")
     
     ggplotly(p)
   })
+  
+  
+  
+
+  
+  
+  # output$multiAreaPlot2 <- renderPlotly({
+  #   req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+  #   req(input$multi_analytes2)
+  #   
+  #   df <- data_reactive_2() %>%
+  #     filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
+  #     arrange(Date)
+  #   
+  #   if (nrow(df) == 0) return(NULL)
+  #   
+  #   p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+  #     geom_line() + geom_point() +
+  #     theme_minimal() +
+  #     labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
+  #     theme(legend.position = "bottom")
+  #   
+  #   ggplotly(p)
+  # })
   
   
   output$downloadCSV2 <- downloadHandler(
@@ -1055,6 +1126,41 @@ server <- function(input, output, session) {
       return(paste(c(msg, details), collapse = "\n"))
     }
   })
+  
+  output$validation_area_multi <- renderText({
+    req(data_reactive_2(), input$multi_analytes2)
+    
+    df <- data_reactive_2() %>%
+      filter(Compound %in% input$multi_analytes2, !is.na(Area))
+    
+    if (nrow(df) == 0) return("❌ Aucune donnée disponible.")
+    
+    moyenne <- mean(df$Area, na.rm = TRUE)
+    seuil_bas <- moyenne / 5
+    seuil_haut <- moyenne * 5
+    
+    df <- df %>%
+      mutate(HorsSeuil = Area < seuil_bas | Area > seuil_haut)
+    
+    n_total <- nrow(df)
+    n_hors_seuil <- sum(df$HorsSeuil, na.rm = TRUE)
+    pct <- round(n_hors_seuil / n_total * 100, 1)
+    
+    composés_hors <- df %>% filter(HorsSeuil) %>%
+      distinct(Compound) %>% pull(Compound)
+    
+    txt <- paste0(
+      "🔍 Validation des Aires\n",
+      "Total de points : ", n_total, "\n",
+      "Points hors-seuil : ", n_hors_seuil, " (", pct, "%)\n",
+      if (pct > 20) "⚠️ Plus de 20 % des points sont hors-seuil\n" else "✅ Proportion acceptable\n",
+      "Composés concernés :\n",
+      paste0("- ", composés_hors, collapse = "\n")
+    )
+    
+    return(txt)
+  })
+  
   
   
   
@@ -1863,10 +1969,24 @@ server <- function(input, output, session) {
                         downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
                         downloadButton("download_area_plot2", "Télécharger Aire (log10) PNG"),
                         plotlyOutput("multiCVPlot2"),
+                        tags$br(),
+                        verbatimTextOutput("sequence_validation_multi"),
                         plotlyOutput("multiAreaPlot2"),
                         tags$br(),
-                        verbatimTextOutput("sequence_validation_multi")
+                        verbatimTextOutput("validation_area_multi")
                )
+               
+               
+               # tabPanel("Cinétiques multi-composés📊",
+               #          downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
+               #          downloadButton("download_area_plot2", "Télécharger Aire (log10) PNG"),
+               #          plotlyOutput("multiCVPlot2"),
+               #          plotlyOutput("multiAreaPlot2"),
+               #          tags$br(),
+               #          verbatimTextOutput("sequence_validation_multi"),
+               #          verbatimTextOutput("validation_area_multi")
+               #          
+               # )
         )
       ),
       
@@ -2062,5 +2182,4 @@ server <- function(input, output, session) {
 # ---- APP ----
 shinyApp(ui, server)
 
-#15h50 -> 15/05/2025
-#dopinoooooooooooooooooooooooooooooooooooooooooooooooooos
+#16h55 LA REUSSITE 15/05/2025
