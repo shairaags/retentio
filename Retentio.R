@@ -69,10 +69,10 @@ ui <- dashboardPage(
                  tabBox(
                    title = "Visualisation", width = 12,
                    id = "main_tab",  # ← ID ajouté pour suivre l'onglet actif
-                        tabPanel("📊",
-                                 plotlyOutput("tenax_summary_plot"),
-                                 plotlyOutput("tenax_cv_plot"),
-                                 DTOutput("tenax_summary_table"))
+                   tabPanel("📊",
+                            plotlyOutput("tenax_summary_plot"),
+                            plotlyOutput("tenax_cv_plot"),
+                            DTOutput("tenax_summary_table"))
                  )
                ),
                
@@ -194,7 +194,7 @@ server <- function(input, output, session) {
     
     selectInput("sheet", "Choisir une feuille Excel :", choices = sheets)
   })
-
+  
   
   preprocess_excel <- function(file_path, sheet_name) {
     df_raw <- read_excel(file_path, sheet = sheet_name, skip = 0, col_names = TRUE)
@@ -353,7 +353,7 @@ server <- function(input, output, session) {
         #   relocate(Compound, DateLabel, Area, CV, Type, Sequence, source_file, Flagged)
         
         return(df)
-      
+        
         
       } else {
         stop(paste0("❌ Structure de fichier CSV inconnue pour : ", filename))
@@ -536,7 +536,7 @@ server <- function(input, output, session) {
     
   })
   
-
+  
   
   observeEvent(input$reset, {
     data_reactive(NULL)  # on vide les données
@@ -624,7 +624,7 @@ server <- function(input, output, session) {
   
   
   
-
+  
   # output$meanBox <- renderValueBox({
   #   df <- filtered_data()
   #   mean_val <- round(mean(df$Area, na.rm = TRUE), 2)
@@ -680,7 +680,7 @@ server <- function(input, output, session) {
     valueBox(cv_moyen, subtitle = "CV extraction (Étalon)", color = box_color)
   })
   
-
+  
   
   output$cvPlot <- renderPlotly({
     df <- filtered_data() %>% group_by(Sequence) %>%
@@ -749,7 +749,7 @@ server <- function(input, output, session) {
     content = function(file) write_csv(filtered_data(), file)
   )
   
-
+  
   output$loadedFiles <- renderText({
     req(input$file_upload)
     
@@ -773,14 +773,14 @@ server <- function(input, output, session) {
            n_points, " points")
   })
   
-
+  
   
   output$multiCVPlot <- renderPlotly({
     df <- data_reactive() %>%
       filter(Compound %in% input$multi_analytes,
              !is.na(Date))
     
-
+    
     # Message d'avertissement si certaines molécules n'ont pas de données
     missing <- setdiff(input$multi_analytes, unique(df$Compound))
     if (length(missing) > 0) {
@@ -791,11 +791,11 @@ server <- function(input, output, session) {
     if (nrow(df) == 0) return(NULL)
     
     cv_data <- df %>%
-  
+      
       filter(!is.na(CV)) %>%
       arrange(Date) #%>%
     
-
+    
     #mutate(CV = CV * 100) ruinay
     p <- ggplot(cv_data, aes(x = Date, y = CV, color = Compound)) +
       geom_line() + geom_point() +
@@ -805,7 +805,7 @@ server <- function(input, output, session) {
            y = "CV (%)", x = "Date") +
       theme(legend.position = "bottom")
     
- 
+    
     
     
     ggplotly(p)
@@ -815,7 +815,7 @@ server <- function(input, output, session) {
     df <- data_reactive() %>%
       filter(Compound %in% input$multi_analytes,
              !is.na(Date))
-
+    
     # Message d'avertissement si certaines molécules n'ont pas de données
     missing <- setdiff(input$multi_analytes, unique(df$Compound))
     if (length(missing) > 0) {
@@ -979,6 +979,48 @@ server <- function(input, output, session) {
            nrow(df), " points")
   })
   
+  # 🔍 Validation automatique sous les graphiques CV / Multi-Analytes (Plasma)
+  output$sequence_validation_cv <- renderText({
+    df <- filtered_data_2()
+    req(nrow(df) > 0)
+    
+    seuil <- 30
+    dépassements <- df %>% filter(!is.na(CV) & CV > seuil) %>%
+      group_by(Compound) %>%
+      summarise(CV_max = round(max(CV, na.rm = TRUE), 1), .groups = "drop")
+    
+    if (nrow(dépassements) == 0) {
+      return("✅ Séquence validée : tous les composés ont un CV ≤ 30%.")
+    } else {
+      msg <- paste0("❌ Séquence non validée : ", nrow(dépassements), " composé(s) dépassent 30% de CV.\n\n")
+      msg <- paste0(msg, "Composés concernés :\n")
+      details <- paste0("- ", dépassements$Compound, " : ", dépassements$CV_max, " %")
+      return(paste(c(msg, details), collapse = "\n"))
+    }
+  })
+  
+  output$sequence_validation_multi <- renderText({
+    df <- data_reactive_2()
+    req(nrow(df) > 0, input$multi_analytes2)
+    
+    df <- df %>% filter(Compound %in% input$multi_analytes2)
+    
+    seuil <- 30
+    dépassements <- df %>% filter(!is.na(CV) & CV > seuil) %>%
+      group_by(Compound) %>%
+      summarise(CV_max = round(max(CV, na.rm = TRUE), 1), .groups = "drop")
+    
+    if (nrow(dépassements) == 0) {
+      return("✅ Séquence validée : tous les composés sélectionnés ont un CV ≤ 30%.")
+    } else {
+      msg <- paste0("❌ Séquence non validée : ", nrow(dépassements), " composé(s) sélectionnés dépassent 30% de CV.\n\n")
+      msg <- paste0(msg, "Composés concernés :\n")
+      details <- paste0("- ", dépassements$Compound, " : ", dépassements$CV_max, " %")
+      return(paste(c(msg, details), collapse = "\n"))
+    }
+  })
+  
+  
   
   # Fonction pour enregistrer le plot CV en PNG
   output$download_cv_plot <- downloadHandler(
@@ -989,10 +1031,10 @@ server <- function(input, output, session) {
       df <- data_reactive() %>%
         filter(Compound %in% input$multi_analytes,
                !is.na(Date), !is.na(Area), Area > 0)
-    
+      
       if (nrow(df) == 0) return(NULL)
       
-     
+      
       cv_data <- df %>%
         filter(!is.na(CV)) %>%
         arrange(Date) #%>%
@@ -1124,22 +1166,46 @@ server <- function(input, output, session) {
       ) %>%      # ✅ ici le pipe est bien relié à la suite
       arrange(Compound, Stat, Date)  # 🔁 tri chronologique réel
     
+    df_long$Date <- as.Date(df_long$Date)
     
     
     
-      # mutate(
-      #   Date = as.Date(Date),
-      #   Value = as.numeric(str_replace(as.character(Value), ",", "."))
-      # )
+    
+    
+    # mutate(
+    #   Date = as.Date(Date),
+    #   Value = as.numeric(str_replace(as.character(Value), ",", "."))
+    # )
     
     # 📈 Plotly
     plot_ly(df_long, x = ~Date, y = ~Value, color = ~Stat, type = "scatter", mode = "lines+markers") %>%
+      
       layout(
         title = "Tendances Min / Max / Moyenne des aires",
         xaxis = list(title = "Date"),
         yaxis = list(title = "Aire"),
-        legend = list(orientation = "h", x = 0.1, y = 1.1)
+        legend = list(orientation = "h", x = 0.1, y = 1.1),
+        shapes = list(
+          list(
+            type = "line",
+            x0 = min(df_long$Date, na.rm = TRUE),
+            x1 = max(df_long$Date, na.rm = TRUE),
+            y0 = mean(df_long$Value[df_long$Stat == "Moyenne"], na.rm = TRUE),
+            y1 = mean(df_long$Value[df_long$Stat == "Moyenne"], na.rm = TRUE),
+            line = list(dash = "dash", color = "red"),
+            xref = "x",
+            yref = "y"
+          )
+        )
       )
+    
+    
+      # layout(
+      #   title = "Tendances Min / Max / Moyenne des aires",
+      #   xaxis = list(title = "Date"),
+      #   yaxis = list(title = "Aire"),
+      #   legend = list(orientation = "h", x = 0.1, y = 1.1)
+      # )
   })
   
   
@@ -1297,7 +1363,7 @@ server <- function(input, output, session) {
   
   
   
-
+  
   
   
   # -- Choix dossier Tenax --
@@ -1373,9 +1439,9 @@ server <- function(input, output, session) {
   })
   
   
- 
   
-
+  
+  
   
   # -- Choix dossier Plasma --
   shinyDirChoose(input, "dir_plasma", roots = volumes, session = session)
@@ -1629,20 +1695,30 @@ server <- function(input, output, session) {
             verbatimTextOutput("data_summary2"))
       ),
       
+      
+      
       fluidRow(
         tabBox(title = "Visualisation", width = 12,
-               tabPanel("CV% par séquence📉", plotlyOutput("CVPlot_time2")),
+               tabPanel("CV% par séquence📉",
+                        plotlyOutput("CVPlot_time2"),
+                        tags$br(),
+                        verbatimTextOutput("sequence_validation_cv")
+               ),  # 👈 fermeture de ce premier tabPanel ici !
+               
                tabPanel("Aires par Date📉", plotlyOutput("trendPlot2")),
                
-               #tabPanel("Aires par date désordonné", plotlyOutput("areaPlot2")), ICI AIRE PAR DATE DESORDONNER
                tabPanel("Cinétiques multi-composés📊",
                         downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
                         downloadButton("download_area_plot2", "Télécharger Aire (log10) PNG"),
                         plotlyOutput("multiCVPlot2"),
-                        plotlyOutput("multiAreaPlot2"))
-               
+                        plotlyOutput("multiAreaPlot2"),
+                        tags$br(),
+                        verbatimTextOutput("sequence_validation_multi")
+               )
         )
       ),
+      
+      
       
       fluidRow(box(title = "Données filtrées", width = 12, DTOutput("dataTable2"))),
       
@@ -1834,6 +1910,4 @@ server <- function(input, output, session) {
 # ---- APP ----
 shinyApp(ui, server)
 
-#10:30 -> 07/05/2025
-#14:45 -> 12/05/2025
-#09:11 -> 15/05/2025
+#10:27 -> 15/05/2025
