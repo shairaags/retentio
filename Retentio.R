@@ -1506,8 +1506,22 @@ server <- function(input, output, session) {
   
   output$tube_selector_ui <- renderUI({
     req(tube_available_ids())
-    selectizeInput("selected_tube", "🔍 Choisir un tube :", choices = tube_available_ids(), selected = NULL)
+    selectizeInput("selected_tube", "🔍 Choisir un tube :", 
+                   choices = tube_available_ids(), 
+                   selected = NULL,
+                   options = list(
+                     placeholder = 'Taper un ID de tube (ex: QC_624845)',
+                     maxOptions = 1000,
+                     highlight = TRUE
+                   ))
+    
   })
+  
+  
+  # output$tube_selector_ui <- renderUI({
+  #   req(tube_available_ids())
+  #   selectizeInput("selected_tube", "🔍 Choisir un tube :", choices = tube_available_ids(), selected = NULL)
+  # })
   
   
   output$tube_file_info <- renderText({
