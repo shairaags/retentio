@@ -17,7 +17,7 @@ source("qualityChecks.R")
 
 # ---- UI ----
 ui <- dashboardPage(
-  dashboardHeader(title = "Suivi GCxGC-MS"),
+  dashboardHeader(title = "Retentio"),
   dashboardSidebar(
     uiOutput("dynamic_sidebar")
   ),
@@ -65,16 +65,42 @@ ui <- dashboardPage(
                      verbatimTextOutput("data_summary"))
                ),
                
+               
                fluidRow(
                  tabBox(
-                   title = "Visualisation", width = 12,
-                   id = "main_tab",  # ← ID ajouté pour suivre l'onglet actif
+                   title = "Visualisation",
+                   width = 12,
+                   id = "main_tab",
+                   
+                   # Onglet résumé standard
                    tabPanel("📊",
                             plotlyOutput("tenax_summary_plot"),
                             plotlyOutput("tenax_cv_plot"),
-                            DTOutput("tenax_summary_table"))
+                            DTOutput("tenax_summary_table")),
+                   
+                   # Onglet par tube déplacé ici
+                   tabPanel("Suivi par tube",
+                            shinyDirButton("dir_tubes", "📁 Choisir dossier tubes individuels", "Sélectionner dossier de fichiers QC_xxx.csv"),
+                            uiOutput("tube_selector_ui"),
+                            verbatimTextOutput("tube_file_info"),
+                            tags$hr(),
+                            fluidRow(
+                              valueBoxOutput("tube_area_mean"),
+                              valueBoxOutput("tube_cv_mean"),
+                              valueBoxOutput("tube_cv_above_30"),
+                              valueBoxOutput("tube_file_count")
+                            ),
+                            plotlyOutput("plot_area_by_date"),
+                            plotlyOutput("plot_cv_by_date"),
+                            plotlyOutput("plot_heatmap_tube"),
+                            DTOutput("table_tube_data"),
+                            downloadButton("download_tube_csv", "Télécharger données tube")
+                   )
                  )
                ),
+               
+               
+               
                
                fluidRow(box(title = "Données filtrées", width = 12, DTOutput("dataTable"))),
                fluidRow(
@@ -99,7 +125,12 @@ server <- function(input, output, session) {
   data_reactive <- reactiveVal()  # ✅ Ajout indispensable
   data_reactive_2 <- reactiveVal()  # pour onglet Retentio 2
   
+  
   data_plasma_wide <- reactiveVal()
+  
+  tube_raw_data <- reactiveVal()
+  tube_available_ids <- reactiveVal()
+  
   
   
   
@@ -132,7 +163,7 @@ server <- function(input, output, session) {
         
         
         tags$hr(),
-        h4("Thème"),
+        h4("Suivi GCxGC-MS"),
         switchInput("dark_mode", label = NULL, onLabel = "🌙", offLabel = "☀️", value = FALSE)
       )
       
@@ -151,7 +182,7 @@ server <- function(input, output, session) {
         pickerInput("multi_analytes2", "Sélection multiple pour Cinétiques multi-composés :", choices = NULL, multiple = TRUE, selected = NULL, options = list(`actions-box` = TRUE, `live-search` = TRUE)),
         checkboxInput("flag_only2", "Voir uniquement les anomalies", value = FALSE),
         tags$hr(),
-        h4("Thème"),
+        h4("Suivi GCxGC-MS"),
         switchInput("dark_mode", label = NULL, onLabel = "🌙", offLabel = "☀️", value = FALSE)
       )
       
@@ -559,6 +590,11 @@ server <- function(input, output, session) {
     showNotification("🔁 Onglet Tenax réinitialisé", type = "message")
     
     shinyjs::reset("file_upload_combined")
+    
+    tube_raw_data(NULL)
+    tube_available_ids(NULL)
+    updateSelectInput(session, "selected_tube", selected = character(0), choices = character(0))
+    
     
     
   })
@@ -1200,12 +1236,12 @@ server <- function(input, output, session) {
       )
     
     
-      # layout(
-      #   title = "Tendances Min / Max / Moyenne des aires",
-      #   xaxis = list(title = "Date"),
-      #   yaxis = list(title = "Aire"),
-      #   legend = list(orientation = "h", x = 0.1, y = 1.1)
-      # )
+    # layout(
+    #   title = "Tendances Min / Max / Moyenne des aires",
+    #   xaxis = list(title = "Date"),
+    #   yaxis = list(title = "Aire"),
+    #   legend = list(orientation = "h", x = 0.1, y = 1.1)
+    # )
   })
   
   
@@ -1437,6 +1473,108 @@ server <- function(input, output, session) {
       )
     })
   })
+  
+  shinyDirChoose(input, "dir_tubes", roots = volumes, session = session)
+  
+  observeEvent(input$dir_tubes, {
+    path <- parseDirPath(volumes, input$dir_tubes)
+    req(path)
+    
+    files <- list.files(path, pattern = "^QC_.*\\.csv$", full.names = TRUE)
+    if (length(files) == 0) {
+      showNotification("❌ Aucun fichier QC_ trouvé dans ce dossier", type = "error")
+      return()
+    }
+    
+    df_all <- purrr::map_dfr(files, function(f) {
+      df <- read_csv2(f, show_col_types = FALSE)
+      df <- df %>%
+        filter(!is.na(Area)) %>%
+        mutate(
+          Compound = as.character(Name),
+          Area = as.numeric(Area),
+          Sample = as.character(Sample),
+          File = basename(f),
+          TubeID = str_extract(basename(f), "QC_\\d+"),
+          Date = as.Date(str_extract(basename(f), "\\d{8}"), "%d%m%Y")
+        )
+    })
+    
+    tube_raw_data(df_all)
+    tube_available_ids(unique(df_all$TubeID))
+  })
+  
+  output$tube_selector_ui <- renderUI({
+    req(tube_available_ids())
+    selectizeInput("selected_tube", "🔍 Choisir un tube :", choices = tube_available_ids(), selected = NULL)
+  })
+  
+  
+  output$tube_file_info <- renderText({
+    req(tube_raw_data(), input$selected_tube)
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    dates <- sort(unique(df$Date))
+    paste0("✅ ", nrow(df), " points | ", length(unique(df$File)), " fichiers\n📅 ", format(min(dates)), " → ", format(max(dates)))
+  })
+  
+  output$tube_area_mean <- renderValueBox({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    valueBox(format(mean(df$Area, na.rm = TRUE), scientific = TRUE, digits = 3), "Aire moyenne", color = "blue")
+  })
+  
+  output$tube_cv_mean <- renderValueBox({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    df_cv <- df %>% group_by(Compound, Date) %>% summarise(cv = sd(Area)/mean(Area)*100, .groups = "drop")
+    valueBox(round(mean(df_cv$cv, na.rm = TRUE), 1), "CV moyen (%)", color = "aqua")
+  })
+  
+  output$tube_cv_above_30 <- renderValueBox({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    df_cv <- df %>% group_by(Compound, Date) %>% summarise(cv = sd(Area)/mean(Area)*100, .groups = "drop")
+    valueBox(sum(df_cv$cv > 30, na.rm = TRUE), "Composés > 30%", color = "orange")
+  })
+  
+  output$tube_file_count <- renderValueBox({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    valueBox(length(unique(df$File)), "Fichiers détectés", color = "purple")
+  })
+  
+  output$plot_area_by_date <- renderPlotly({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    plot_ly(df, x = ~Date, y = ~Area, color = ~Compound, type = "scatter", mode = "lines+markers") %>%
+      layout(title = "Aires par date", yaxis = list(title = "Area"), xaxis = list(title = "Date"))
+  })
+  
+  output$plot_cv_by_date <- renderPlotly({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    df_cv <- df %>% group_by(Compound, Date) %>% summarise(cv = sd(Area)/mean(Area)*100, .groups = "drop")
+    plot_ly(df_cv, x = ~Date, y = ~cv, color = ~Compound, type = "scatter", mode = "lines+markers") %>%
+      layout(title = "CV (%) par date", yaxis = list(title = "CV (%)"), xaxis = list(title = "Date"))
+  })
+  
+  output$plot_heatmap_tube <- renderPlotly({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    df_avg <- df %>% group_by(Compound, Date) %>% summarise(Aire = mean(Area), .groups = "drop")
+    df_wide <- pivot_wider(df_avg, names_from = Date, values_from = Aire)
+    mat <- as.matrix(df_wide[,-1])
+    rownames(mat) <- df_wide$Compound
+    
+    plot_ly(z = mat, type = "heatmap", x = colnames(mat), y = rownames(mat), colorscale = "Viridis") %>%
+      layout(title = "Heatmap Aire", xaxis = list(title = "Date"), yaxis = list(title = "Composé"))
+  })
+  
+  output$table_tube_data <- renderDT({
+    df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+    datatable(df %>% select(Compound, Area, Date, File), options = list(scrollX = TRUE, pageLength = 10))
+  })
+  
+  output$download_tube_csv <- downloadHandler(
+    filename = function() paste0("tube_", input$selected_tube, "_", Sys.Date(), ".csv"),
+    content = function(file) {
+      df <- tube_raw_data() %>% filter(TubeID == input$selected_tube)
+      write_csv2(df, file)
+    }
+  )
   
   
   
@@ -1910,5 +2048,5 @@ server <- function(input, output, session) {
 # ---- APP ----
 shinyApp(ui, server)
 
-#10:38 -> 15/05/2025
-#yepos
+#15h50 -> 15/05/2025
+#dopinoooooooooooooooooooooooooooooooooooooooooooooooooos
