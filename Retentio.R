@@ -357,31 +357,7 @@ server <- function(input, output, session) {
           relocate(Compound, Date, DateLabel, Area, CV, Type, Sequence, source_file, Flagged)
         
         
-        # df <- df %>%
-        #   pivot_longer(
-        #     cols = -Compound,
-        #     names_to = "Measure",
-        #     values_to = "Value"
-        #   ) %>%
-        #   separate(Measure, into = c("TypeMeasure", "DateRaw"), sep = "_", extra = "merge") %>%
-        #   mutate(
-        #     DateLabel = str_remove(DateRaw, "^QC_|^bio_|^Area_|^CV_"),
-        #     DateLabel = str_replace_all(DateLabel, "\\.", "_"),
-        #     DateLabel = factor(DateLabel, levels = unique(DateRaw)),  # ordre de lecture
-        #     Value = as.numeric(str_replace(as.character(Value), ",", "."))
-        #   ) %>%
-        #   pivot_wider(names_from = TypeMeasure, values_from = Value) %>%
-        #   mutate(
-        #     Type = case_when(
-        #       str_detect(tolower(Compound), "fame") ~ "FAME",
-        #       str_detect(tolower(Compound), "-d[0-9]+") ~ "Étalon Interne",
-        #       TRUE ~ "Analyte"
-        #     ),
-        #     Sequence = "Formaté CSV",
-        #     source_file = filename,
-        #     Flagged = FALSE
-        #   ) %>%
-        #   relocate(Compound, DateLabel, Area, CV, Type, Sequence, source_file, Flagged)
+        
         
         return(df)
         
@@ -441,71 +417,7 @@ server <- function(input, output, session) {
     }
   }
   
-  # 1. observeEvent Excel
   
-  # observeEvent(input$refresh, {
-  #   req(input$file_upload)
-  #   
-  #   files <- input$file_upload$datapath
-  #   filenames <- input$file_upload$name
-  #   
-  #   full_data <- tibble()
-  #   
-  #   withProgress(message = "⏳ Chargement des fichiers...", value = 0, {
-  #     total_steps <- length(files)
-  #     
-  #     for (i in seq_along(files)) {
-  #       file_path <- files[i]
-  #       file_name <- filenames[i]
-  #       
-  #       if (grepl("\\.csv$", file_name, ignore.case = TRUE)) {
-  #         # ✅ Lecture intelligente même pour fichiers déjà formatés (Plasma ou Tenax)
-  #         df <- preprocess_smart(file_path, file_name)
-  #         full_data <- bind_rows(full_data, df)
-  #       }
-  #       
-  #       
-  #       
-  #       # Cas Excel
-  #       if (grepl("\\.xlsx$", file_name, ignore.case = TRUE)) {
-  #         sheets <- excel_sheets(file_path)
-  #         for (sheet in sheets) {
-  #           df <- preprocess_smart(file_path, file_name, sheet)
-  #           full_data <- bind_rows(full_data, df)
-  #         }
-  #       }
-  #       
-  #       incProgress(1 / total_steps)
-  #     }
-  #   })
-  #   
-  #   if (nrow(full_data) == 0) {
-  #     showModal(
-  #       modalDialog(
-  #         title = "❌ Erreur",
-  #         "Aucun fichier exploitable trouvé.",
-  #         easyClose = TRUE,
-  #         footer = modalButton("OK")
-  #       )
-  #     )
-  #     return()
-  #   }
-  #   
-  #   
-  #   #df_flagged <- flag_anomalies(full_data)
-  #   if ("RT" %in% names(full_data)) {
-  #     df_flagged <- flag_anomalies(full_data)
-  #   } else {
-  #     df_flagged <- full_data
-  #   }
-  #   
-  #   data_reactive(df_flagged)
-  #   
-  #   updatePickerInput(session, "analyte", choices = sort(unique(df_flagged$Compound)))
-  #   updatePickerInput(session, "multi_analytes", choices = unique(df_flagged$Compound))
-  #   
-  #   showNotification("✅ Fichiers chargés avec succès.", type = "message")
-  # })
   
   observe({
     req(input$dark_mode)
@@ -659,14 +571,6 @@ server <- function(input, output, session) {
   })
   
   
-  
-  
-  # output$meanBox <- renderValueBox({
-  #   df <- filtered_data()
-  #   mean_val <- round(mean(df$Area, na.rm = TRUE), 2)
-  #   formatted <- format(mean_val, decimal.mark = ".", big.mark = "", scientific = FALSE)
-  #   valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
-  # })
   
   
   output$nSeqBox <- renderValueBox({
@@ -1044,29 +948,6 @@ server <- function(input, output, session) {
   
   
   
-
-  
-  
-  # output$multiAreaPlot2 <- renderPlotly({
-  #   req(data_reactive_2(), nrow(data_reactive_2()) > 0)
-  #   req(input$multi_analytes2)
-  #   
-  #   df <- data_reactive_2() %>%
-  #     filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
-  #     arrange(Date)
-  #   
-  #   if (nrow(df) == 0) return(NULL)
-  #   
-  #   p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
-  #     geom_line() + geom_point() +
-  #     theme_minimal() +
-  #     labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
-  #     theme(legend.position = "bottom")
-  #   
-  #   ggplotly(p)
-  # })
-  
-  
   output$downloadCSV2 <- downloadHandler(
     filename = function() paste0("donnees_filtrees_retentio2_", Sys.Date(), ".csv"),
     content = function(file) write_csv(filtered_data_2(), file)
@@ -1212,13 +1093,7 @@ server <- function(input, output, session) {
     valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
   })
   
-  
-  # output$meanBox2 <- renderValueBox({
-  #   df <- filtered_data_2()
-  #   mean_val <- round(mean(df$Area, na.rm = TRUE), 2)
-  #   formatted <- format(mean_val, decimal.mark = ".", big.mark = "", scientific = FALSE)
-  #   valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
-  # })
+
   
   output$nSeqBox2 <- renderValueBox({
     df <- filtered_data_2()
@@ -1311,13 +1186,7 @@ server <- function(input, output, session) {
     df_long$Date <- as.Date(df_long$Date)
     
     
-    
-    
-    
-    # mutate(
-    #   Date = as.Date(Date),
-    #   Value = as.numeric(str_replace(as.character(Value), ",", "."))
-    # )
+  
     
     # 📈 Plotly
     plot_ly(df_long, x = ~Date, y = ~Value, color = ~Stat, type = "scatter", mode = "lines+markers") %>%
@@ -1341,41 +1210,7 @@ server <- function(input, output, session) {
         )
       )
     
-    
-    # layout(
-    #   title = "Tendances Min / Max / Moyenne des aires",
-    #   xaxis = list(title = "Date"),
-    #   yaxis = list(title = "Aire"),
-    #   legend = list(orientation = "h", x = 0.1, y = 1.1)
-    # )
   })
-  
-  
-  
-  
-  
-  
-  
-  
-  # output$trendPlot2 <- renderPlotly({
-  #   req(data_reactive_2(), nrow(data_reactive_2()) > 0)
-  #   
-  #   df <- filtered_data_2()
-  #   summary <- df %>%
-  #     group_by(Date) %>%
-  #     summarise(Min = min(Area, na.rm = TRUE),
-  #               Max = max(Area, na.rm = TRUE),
-  #               Mean = mean(Area, na.rm = TRUE),
-  #               .groups = "drop")
-  #   
-  #   plot_ly(summary, x = ~Date) %>%
-  #     add_lines(y = ~Min, name = "Min", line = list(color = "blue")) %>%
-  #     add_lines(y = ~Mean, name = "Moyenne", line = list(color = "orange")) %>%
-  #     add_lines(y = ~Max, name = "Max", line = list(color = "green")) %>%
-  #     layout(yaxis = list(title = "Tendance des Aires"))
-  # })
-  
-  
   
   # Fonction pour enregistrer le plot Aire log10 en PNG
   output$download_area_plot <- downloadHandler(
@@ -1505,9 +1340,6 @@ server <- function(input, output, session) {
   
   
   
-  
-  
-  
   # -- Choix dossier Tenax --
   shinyDirChoose(input, "dir_tenax", roots = volumes, session = session)
   
@@ -1593,7 +1425,7 @@ server <- function(input, output, session) {
     }
     
     df_all <- purrr::map_dfr(files, function(f) {
-      df <- read_csv2(f, show_col_types = FALSE)
+      df <- read_csv(f, show_col_types = FALSE)
       df <- df %>%
         filter(!is.na(Area)) %>%
         mutate(
@@ -1976,17 +1808,6 @@ server <- function(input, output, session) {
                         verbatimTextOutput("validation_area_multi")
                )
                
-               
-               # tabPanel("Cinétiques multi-composés📊",
-               #          downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
-               #          downloadButton("download_area_plot2", "Télécharger Aire (log10) PNG"),
-               #          plotlyOutput("multiCVPlot2"),
-               #          plotlyOutput("multiAreaPlot2"),
-               #          tags$br(),
-               #          verbatimTextOutput("sequence_validation_multi"),
-               #          verbatimTextOutput("validation_area_multi")
-               #          
-               # )
         )
       ),
       
@@ -2170,10 +1991,6 @@ server <- function(input, output, session) {
     
     showNotification("✅ Fichiers Tenax chargés avec succès !", type = "message")
   })
-  
-  
-  
-  
   
   
 }
