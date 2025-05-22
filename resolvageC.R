@@ -13,6 +13,19 @@ name<-names(df)
 # changer le nom des mollecule avec vurgule
 df<-apply(df,1,function(x) stringi::stri_replace_last_fixed(str=x,pattern = "Decanoic acid, methyl ester C10",
                                                    replacement = "Decanoic acid methyl ester C10"))
+df<-sapply(df,1,function(x) stringi::stri_replace_last_fixed(str=x,pattern = "Dodecanoic acid, methyl ester C12",
+                                                            replacement = "Dodecanoic acid methyl ester C12"))
+df<-sapply(df,1,function(x) stringi::stri_replace_last_fixed(str=x,pattern = "Eicosanoic acid, methyl ester C20",
+                                                             replacement = "Eicosanoic acid methyl ester C20"))
+df<-sapply(df,1,function(x) stringi::stri_replace_last_fixed(str=x,pattern = "Docosanoic acid, methyl ester C22",
+                                                             replacement = "Docosanoic acid methyl ester C22"))
+df<-sapply(df,1,function(x) stringi::stri_replace_last_fixed(str=x,pattern = "Tetracosanoic acid, methyl ester C24",
+                                                             replacement = "Tetracosanoic acid methyl ester C24"))
+df<-sapply(df,1,function(x) stringi::stri_replace_last_fixed(str=x,pattern = "Hexacosanoic acid, methyl ester C26",
+                                                             replacement = "Hexacosanoic acid methyl ester C26"))
+df<-sapply(df,1,function(x) stringi::stri_replace_last_fixed(str=x,pattern = "Octacosanoic acid, methyl ester C28",
+                                                             replacement = "Octacosanoic acid methyl ester C28"))
+
 
 #.....
 

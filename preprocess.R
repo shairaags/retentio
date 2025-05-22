@@ -2,19 +2,105 @@ library(tidyverse)
 library(lubridate)
 library(readxl)
 
+# 🔧 Lecture CSV robuste (gère aussi les colonnes collées entre guillemets)
+read_csv_tenax_robust <- function(filepath) {
+  first_line <- readLines(filepath, n = 1, warn = FALSE)
+  
+  # Cas collé avec guillemets
+  if (str_detect(first_line, '^"[^"]+","[^"]+')) {
+    df <- tryCatch(read.csv(filepath, quote = '"', stringsAsFactors = FALSE), error = function(e) return(tibble()))
+    
+    # Cas brut classique avec virgules
+  } else if (str_count(first_line, ",") > str_count(first_line, ";")) {
+    df <- tryCatch(read.csv(filepath, stringsAsFactors = FALSE), error = function(e) return(tibble()))
+    
+    # Cas séparateur point-virgule classique
+  } else {
+    df <- tryCatch(read.csv2(filepath, stringsAsFactors = FALSE), error = function(e) return(tibble()))
+  }
+  
+  names(df) <- str_replace_all(names(df), '"', "")
+  return(df)
+}
+
+
+
+# ---- FONCTION POUR DÉCOLLER UN FICHIER BRUT COLLÉ EN UNE SEULE COLONNE ----
+
+# # Nouvelle fonction plus robuste
+# try_fix_csv_with_quotes <- function(file_path) {
+#   # Lecture ligne brute
+#   raw_lines <- readLines(file_path, warn = FALSE)
+#   if (length(raw_lines) < 2) return(NULL)
+#   
+#   # Teste présence de colonnes collées mais avec guillemets
+#   if (!any(str_detect(raw_lines[1], '","'))) return(NULL)  # Pas le bon format
+#   
+#   # Lecture avec gestion des guillemets et virgules
+#   df <- tryCatch(read.csv(file_path, stringsAsFactors = FALSE, quote = '"'), error = function(e) return(NULL))
+#   if (is.null(df) || ncol(df) < 3) return(NULL)
+#   
+#   # Vérifie les colonnes attendues
+#   colnames(df)[1:3] <- c("Sample", "Name", "Area")
+#   df$Name <- str_replace_all(df$Name, " acid, methyl ester", " acid methyl ester")
+#   
+#   # Sauvegarde vers fichier temporaire utilisable downstream
+#   tmp_path <- tempfile(fileext = ".csv")
+#   write_csv2(df, tmp_path)
+#   return(tmp_path)
+# }
+
+try_fix_csv_with_quotes <- function(file_path) {
+  raw_lines <- readLines(file_path, warn = FALSE)
+  if (length(raw_lines) < 2) return(NULL)
+  if (!any(str_detect(raw_lines[1], '","'))) return(NULL)
+  df <- tryCatch(read.csv(file_path, stringsAsFactors = FALSE, quote = '"'), error = function(e) return(NULL))
+  if (is.null(df) || ncol(df) < 3) return(NULL)
+  colnames(df)[1:3] <- c("Sample", "Name", "Area")
+  df$Name <- str_replace_all(df$Name, " acid, methyl ester", " acid methyl ester")
+  tmp_path <- tempfile(fileext = ".csv")
+  write_csv2(df, tmp_path)
+  return(tmp_path)
+}
+
+
+
+
+
+
+# ----------- FICHIER BRUT CLASSIQUE -----------
+
 # ----------- FICHIER BRUT CLASSIQUE -----------
 
 preprocess_single_file <- function(filepath) {
-  df <- tryCatch(read_csv2(filepath, show_col_types = FALSE), error = function(e) return(tibble()))
+  
+  # 🧪 Essai de réparation avec CSV à guillemets + virgules
+  fixed_path <- try_fix_csv_with_quotes(filepath)
+  if (!is.null(fixed_path)) {
+    message("🧬 Fichier brut collé avec guillemets détecté et corrigé automatiquement.")
+    filepath <- fixed_path
+  }
+  
+  # Puis fallback classique si encore échoué
+  if (!file.exists(filepath)) return(tibble())
+  
+  df <- tryCatch(read.csv2(filepath, stringsAsFactors = FALSE), error = function(e) return(tibble()))
   if (nrow(df) == 0) return(tibble())
   
-  cols <- names(df)
-  rename_list <- list(Sample = "Sample", Compound = "Name", Area = "Area")
-  if ("R.T. (min)" %in% cols) rename_list$RT <- "R.T. (min)"
-  if ("Quant Masses" %in% cols) rename_list$Ion <- "Quant Masses"
+  # ✅ ENLÈVE les guillemets des noms de colonnes
+  names(df) <- str_replace_all(names(df), '"', "")
+  
+  if (nrow(df) == 0) return(tibble())
+  
+  # ✅ CORRECTION OBLIGATOIRE : enlever les guillemets des noms de colonnes
+  names(df) <- str_replace_all(names(df), '"', "")  # ← C'est ici le fix essentiel
+  
+  # ✅ Nettoyage des colonnes
+  if ("Name" %in% names(df)) df <- df %>% rename(Compound = Name)
+  if (!("Sample" %in% names(df))) stop("❌ Fichier sans colonne 'Sample' — structure non valide.")
+  if (!("Area" %in% names(df))) stop("❌ Fichier sans colonne 'Area' — structure non valide.")
   
   df <- df %>%
-    rename(!!!rename_list) %>%
     mutate(
       Area = as.numeric(str_replace(as.character(Area), ",", ".")),
       Sequence = tools::file_path_sans_ext(basename(filepath)),
@@ -29,28 +115,40 @@ preprocess_single_file <- function(filepath) {
   return(df)
 }
 
+
+
+
 # ----------- FICHIER QC SPÉCIAL -----------
 
 preprocess_QC_file <- function(file_path, filename) {
-  df <- read_csv2(file_path, show_col_types = FALSE)
+  fixed_path <- try_split_single_column_csv(file_path)
+  if (!is.null(fixed_path)) {
+    message("🧬 Fichier brut collé détecté et corrigé automatiquement.")
+    return(preprocess_single_file(fixed_path))
+  }
+  
+  df <- tryCatch(read.csv2(file_path, stringsAsFactors = FALSE), error = function(e) return(tibble()))
   if (nrow(df) == 0) return(tibble())
+  
+  # 🔧 Nettoyage des noms
+  names(df) <- str_replace_all(names(df), '"', "")
   
   df <- df %>%
     rename(Compound = Name) %>%
     mutate(
       Area = as.numeric(str_replace(as.character(Area), ",", ".")),
-      Sequence = tools::file_path_sans_ext(basename(filename)),  # ← ⚠️ clé ici
-      Date = suppressWarnings(ymd(str_extract(filename, "\\d{8}"))),  # ← vraie date
+      Sequence = tools::file_path_sans_ext(basename(filename)),
+      Date = suppressWarnings(ymd(str_extract(filename, "\\d{8}"))),
       CV = NA_real_,
       Flagged = FALSE,
       Type = "Analyte",
       source_file = filename
     )
   
-  if ("1st Dimension" %in% names(df)) {
-    df <- df %>% mutate(RT = `1st Dimension`)
+  df <- if ("1st Dimension" %in% names(df)) {
+    df %>% mutate(RT = `1st Dimension`)
   } else {
-    df <- df %>% mutate(RT = NA_character_)
+    df %>% mutate(RT = NA_character_)
   }
   
   df <- df %>%
@@ -67,19 +165,32 @@ preprocess_QC_file <- function(file_path, filename) {
 
 # ----------- FICHIER FORMATÉ (TABLEAU FINAL) -----------
 
+# ----------- FICHIER FORMATÉ (TABLEAU FINAL) -----------
+
 preprocess_smart <- function(file_path, filename, sheet_name = NULL) {
   if (grepl("^QC_", basename(filename))) {
     message("\U0001F4C2 Fichier QC détecté")
     return(preprocess_QC_file(file_path, filename))
   }
   
-  df <- tryCatch(read_csv2(file_path, show_col_types = FALSE), error = function(e) return(tibble()))
+  # 🔍 Tentative de réparation fichier collé
+  fixed_path <- try_split_single_column_csv(file_path)
+  if (!is.null(fixed_path)) {
+    message("🧬 Fichier brut collé détecté et corrigé automatiquement.")
+    return(preprocess_single_file(fixed_path))  # injection dans le flux normal
+  }
+  
+  # ✅ Lecture robuste + nettoyage noms
+  df <- tryCatch(read.csv2(file_path, stringsAsFactors = FALSE), error = function(e) return(tibble()))
   if (nrow(df) == 0) return(tibble())
+  
+  # ✅ Nettoyage des guillemets dans les noms de colonnes
+  names(df) <- str_replace_all(names(df), '"', "")
   
   cols_lower <- tolower(names(df))
   
-  if (all(c("sample", "name", "r.t. (min)", "quant masses", "area") %in% cols_lower)) {
-    message("\U0001F9EA Fichier Tenax brut détecté")
+  if (all(c("sample", "name", "area") %in% cols_lower)) {
+    message("\U0001F9EA Fichier Tenax brut simplifié détecté")
     return(preprocess_single_file(file_path))
   }
   
@@ -144,39 +255,53 @@ preprocess_smart <- function(file_path, filename, sheet_name = NULL) {
   stop(paste0("❌ Structure inconnue pour le fichier : ", filename))
 }
 
+
 # ----------- TRAITEMENT DOSSIER TENAX -----------
-# ----------- TRAITEMENT DOSSIER TENAX -----------
+
 preprocess_folder_tenax <- function(dir_path) {
   files <- list.files(dir_path, pattern = "\\.csv$", full.names = TRUE)
   if (length(files) == 0) return(tibble())
   
-  all_tables <- map(files, function(filepath) {
-    df <- tryCatch(read_csv2(filepath, show_col_types = FALSE), error = function(e) return(tibble()))
-    if (nrow(df) == 0) return(tibble())
+  all_tables <- list()
+  
+  for (filepath in files) {
+    # Lecture robuste
+    raw_lines <- readLines(filepath, warn = FALSE)
+    if (str_detect(raw_lines[1], '^"[^"]+","[^"]+')) {
+      df <- tryCatch(read.csv(filepath, quote = '"', stringsAsFactors = FALSE), error = function(e) return(tibble()))
+    } else if (str_count(raw_lines[1], ",") > str_count(raw_lines[1], ";")) {
+      df <- tryCatch(read.csv(filepath, stringsAsFactors = FALSE), error = function(e) return(tibble()))
+    } else {
+      df <- tryCatch(read.csv2(filepath, stringsAsFactors = FALSE), error = function(e) return(tibble()))
+    }
     
-    # Renommage
-    if ("Name" %in% names(df)) df <- df %>% rename(Compound = Name)
-    if (!all(c("Compound", "Sample", "Area") %in% names(df))) return(tibble())
+    if (nrow(df) == 0) next
+    names(df) <- str_replace_all(names(df), '"', "")
+    if (!all(c("Sample", "Name", "Area") %in% names(df))) next
     
     df <- df %>%
+      rename(Compound = Name) %>%
       mutate(
         Area = as.numeric(str_replace(as.character(Area), ",", ".")),
         Sample = as.character(Sample)
       )
     
+    # Nom de la colonne : Area_<nom_du_fichier_sans_ext>
     file_label <- basename(filepath) %>%
       tools::file_path_sans_ext() %>%
       str_replace_all("[^A-Za-z0-9]", "_")
     
     area_col <- paste0("Area_", file_label)
     
-    df %>%
+    summarised <- df %>%
       group_by(Compound) %>%
       summarise(
         !!area_col := mean(Area, na.rm = TRUE),
         .groups = "drop"
       )
-  })
+    
+    all_tables[[length(all_tables) + 1]] <- summarised
+  }
   
   all_tables <- all_tables[map_lgl(all_tables, ~ nrow(.) > 0)]
   if (length(all_tables) == 0) return(tibble())
@@ -186,9 +311,7 @@ preprocess_folder_tenax <- function(dir_path) {
     select(Compound, everything())
   
   # Calculs finaux : Moyenne globale + CV global
-  area_values <- wide_data %>%
-    select(starts_with("Area_")) %>%
-    mutate_all(as.numeric)
+  area_values <- wide_data %>% select(starts_with("Area_")) %>% mutate_all(as.numeric)
   
   wide_data <- wide_data %>%
     mutate(
