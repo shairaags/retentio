@@ -1,28 +1,35 @@
-library(shiny)
-library(shinydashboard)
-library(shinyWidgets)
-library(tidyverse)
-library(DT)
-library(plotly)
-library(lubridate)
-library(readxl)
-library(shinyFiles)
-library(shinyjs)
+# Chargement des librairies nécessaires
+# Ces packages sont essentiels pour faire fonctionner Retentio dans R Shiny avec UI réactive, graphes Plotly, etc.
+library(shiny)            # Framework principal pour l’application web
+library(shinydashboard)   # Mise en page Dashboard (header, sidebar, body)
+library(shinyWidgets)     # Composants enrichis (pickerInput, switchInput, etc.)
+library(tidyverse)        # Ensemble d’outils pour manipuler les données (dplyr, ggplot2, etc.)
+library(DT)               # Rendu interactif de tableaux (DataTable)
+library(plotly)           # Graphiques dynamiques (utilisés pour toutes les courbes)
+library(lubridate)        # Manipulation des dates (ymd, etc.)
+library(readxl)           # Lecture de fichiers Excel (.xlsx)
+library(shinyFiles)       # Permet de sélectionner des dossiers sur le disque
+library(shinyjs)          # Permet de manipuler le DOM JS (ajouter une classe, réinitialiser un input, etc.)
 
 
-source("preprocess.R")
+# 🔁 Chargement des scripts externes
+# Ceux-ci contiennent tes fonctions maison pour le prétraitement et la qualité
+source("preprocess.R")       # Fonctions : preprocess_smart, preprocess_folder_tenax, etc.
+source("qualityChecks.R")    # Fonctions : flag_anomalies(), calculs de CV et vérifications qualité
 
-source("qualityChecks.R")
+# Interface Utilisateur (UI) de l’application
+# dashboardPage() structure la page avec un en-tête, une sidebar et un corps
 
 
 # ---- UI ----
 ui <- dashboardPage(
-  dashboardHeader(title = "Retentio"),
+  dashboardHeader(title = "Retentio"),# Titre
   dashboardSidebar(
-    uiOutput("dynamic_sidebar")
+    uiOutput("dynamic_sidebar")# Sidebar générée dynamiquement selon l'onglet actif
   ),
   dashboardBody(
-    useShinyjs(),
+    useShinyjs(),# Permet d'utiliser les fonctions JS plus bas (ajout de classes, reset d’input…)
+    # Style pour recentrer les notifications
     tags$head(
       tags$style(HTML("
     .shiny-notification {
@@ -36,6 +43,7 @@ ui <- dashboardPage(
     }
   "))
     ),
+    # Bloc HTML supplémentaire personnalisable (non utilisé ici)
     tags$head(
       tags$style(HTML("
       /* ici tu peux conserver TON style existant */
@@ -50,7 +58,7 @@ ui <- dashboardPage(
       
       # ONGLET 1 : Retentio Original
       tabPanel("Tenax",
-               # 👇 tout ton contenu actuel ici
+               # tout ton contenu actuel ici
                fluidRow(
                  valueBoxOutput("cvBox"),
                  valueBoxOutput("meanBox"),
@@ -60,12 +68,12 @@ ui <- dashboardPage(
                ),
                
                fluidRow(
-                 box(title = "Fichiers chargés", width = 12,
-                     verbatimTextOutput("loadedFiles"),
-                     verbatimTextOutput("data_summary"))
+                 box(title = "Fichiers chargés", width = 12, #resumer des fichiers charger
+                     verbatimTextOutput("loadedFiles"), #nom des fichiers
+                     verbatimTextOutput("data_summary")) #resumer donner
                ),
                
-               
+               # Visualisation des données Tenax : 1. Résumé standard 2. Suivi par tube QC
                fluidRow(
                  tabBox(
                    title = "Visualisation",
@@ -131,11 +139,6 @@ server <- function(input, output, session) {
   tube_raw_data <- reactiveVal()
   tube_available_ids <- reactiveVal()
   
-  
-  
-  
-  source("qualityChecks.R")
-  source("preprocess.R")
   
   output$dynamic_sidebar <- renderUI({
     if (input$main_tabs == "Tenax") {
@@ -491,7 +494,7 @@ server <- function(input, output, session) {
     
     updatePickerInput(session, "analyte", selected = character(0), choices = NULL)
     updatePickerInput(session, "multi_analytes", selected = character(0), choices = NULL)
-    updateCheckboxInput(session, "flag_only", value = FALSE)
+    # updateCheckboxInput(session, "flag_only", value = FALSE)
     updatePickerInput(session, "sequence", selected = character(0), choices = NULL)
     updatePickerInput(session, "type", selected = "Tous", choices = c("Tous", "FAME", "Analyte", "Étalon Interne"))
     updatePickerInput(session, "sequence", selected = character(0), choices = NULL)
@@ -527,58 +530,116 @@ server <- function(input, output, session) {
     
   })
   
-  
-  
   filtered_data <- reactive({
-    req(data_reactive(), input$analyte)
     df <- data_reactive()
     
-    # Sécurité si data n'a pas de colonne Date (cas fichier résumé)
-    if (!"Date" %in% colnames(df)) return(tibble())
+    # ✅ Blocage si data vide ou pas les bonnes colonnes
+    if (is.null(df) || !"Date" %in% colnames(df) || !"Compound" %in% colnames(df)) return(tibble())
+    if (is.null(input$analyte)) return(tibble())
     
     df <- df %>% filter(str_to_lower(Compound) == str_to_lower(input$analyte))
     
-    if (input$flag_only) df <- df %>% filter(Flagged)
+    if (!is.null(input$flag_only) && input$flag_only) {
+      df <- df %>% filter(Flagged)
+    }
     
-    # 🎯 Filtrage par séquence
     if (!is.null(input$sequence) && length(input$sequence) > 0) {
       df <- df %>% filter(Sequence %in% input$sequence)
     }
     
-    # 🎯 Filtrage par type
     if (!is.null(input$type) && input$type != "Tous") {
       df <- df %>% filter(Type == input$type)
     }
     
-    validate(need(nrow(df) > 0, "Aucune donnée disponible avec les filtres actuels."))
     df
   })
   
   
+  
+  
+  # filtered_data <- reactive({
+  #   req(data_reactive(), input$analyte)
+  #   df <- data_reactive()
+  #   
+  #   # Sécurité si data n'a pas de colonne Date (cas fichier résumé)
+  #   if (!"Date" %in% colnames(df)) return(tibble())
+  #   
+  #   df <- df %>% filter(str_to_lower(Compound) == str_to_lower(input$analyte))
+  #   
+  #   if (input$flag_only) df <- df %>% filter(Flagged)
+  #   
+  #   # 🎯 Filtrage par séquence
+  #   if (!is.null(input$sequence) && length(input$sequence) > 0) {
+  #     df <- df %>% filter(Sequence %in% input$sequence)
+  #   }
+  #   
+  #   # 🎯 Filtrage par type
+  #   if (!is.null(input$type) && input$type != "Tous") {
+  #     df <- df %>% filter(Type == input$type)
+  #   }
+  #   
+  #   validate(need(nrow(df) > 0, "Aucune donnée disponible avec les filtres actuels."))
+  #   df
+  # })
+  
+  
+  # output$cvBox <- renderValueBox({
+  #   df <- filtered_data()
+  #   if (all(is.na(df$CV))) return(valueBox("NA", subtitle = "CV%", color = "aqua"))
+  #   
+  #   cv_moyen <- round(mean(df$CV, na.rm = TRUE), 1)  # ✅ On utilise directement la colonne CV
+  #   box_color <- if (cv_moyen < 30) "green" else "red"
+  #   
+  #   valueBox(cv_moyen, subtitle = "CV%", color = box_color)
+  # })
+  
   output$cvBox <- renderValueBox({
     df <- filtered_data()
-    if (all(is.na(df$CV))) return(valueBox("NA", subtitle = "CV%", color = "aqua"))
+    if (nrow(df) == 0 || all(is.na(df$CV))) {
+      return(valueBox("NA", subtitle = "CV%", color = "aqua"))
+    }
     
-    cv_moyen <- round(mean(df$CV, na.rm = TRUE), 1)  # ✅ On utilise directement la colonne CV
+    cv_moyen <- round(mean(df$CV, na.rm = TRUE), 1)
     box_color <- if (cv_moyen < 30) "green" else "red"
-    
     valueBox(cv_moyen, subtitle = "CV%", color = box_color)
   })
   
+  
+  # output$meanBox <- renderValueBox({
+  #   df <- filtered_data()
+  #   mean_val <- mean(df$Area, na.rm = TRUE)
+  #   formatted <- format(mean_val, scientific = TRUE, digits = 3)
+  #   valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
+  # })
+  
+  
   output$meanBox <- renderValueBox({
     df <- filtered_data()
+    if (nrow(df) == 0 || all(is.na(df$Area))) {
+      return(valueBox("NA", subtitle = "Aire Moyenne", color = "blue"))
+    }
     mean_val <- mean(df$Area, na.rm = TRUE)
     formatted <- format(mean_val, scientific = TRUE, digits = 3)
-    valueBox(ifelse(is.na(mean_val), "NA", formatted), subtitle = "Aire Moyenne", color = "blue")
+    valueBox(formatted, subtitle = "Aire Moyenne", color = "blue")
   })
   
   
+  
+  
+  # output$nSeqBox <- renderValueBox({
+  #   df <- filtered_data()
+  #   valueBox(length(unique(df$Sequence)), subtitle = "Séquences", color = "purple")
+  # })
   
   
   output$nSeqBox <- renderValueBox({
     df <- filtered_data()
+    if (nrow(df) == 0 || !"Sequence" %in% colnames(df)) {
+      return(valueBox("NA", subtitle = "Séquences", color = "purple"))
+    }
     valueBox(length(unique(df$Sequence)), subtitle = "Séquences", color = "purple")
   })
+  
   
   # --- LOGIQUE CONDITIONNELLE POUR CACHER LES BOX INUTILES ---
   
@@ -601,26 +662,55 @@ server <- function(input, output, session) {
   outputOptions(output, "showSequenceBox", suspendWhenHidden = FALSE)
   
   
+  # output$cvBoxFAME <- renderValueBox({
+  #   df <- filtered_data() %>% filter(Type == "FAME")
+  #   if (nrow(df) == 0 || all(is.na(df$Area))) return(valueBox("NA", subtitle = "CV FAME", color = "aqua"))
+  #   cv <- round(sd(df$Area, na.rm = TRUE) / mean(df$Area, na.rm = TRUE) * 100, 1)
+  #   box_color <- if (cv < 10) "green" else "orange"
+  #   valueBox(cv, subtitle = "CV injection (FAME)", color = box_color)
+  # })
   output$cvBoxFAME <- renderValueBox({
-    df <- filtered_data() %>% filter(Type == "FAME")
-    if (nrow(df) == 0 || all(is.na(df$Area))) return(valueBox("NA", subtitle = "CV FAME", color = "aqua"))
+    df <- filtered_data()
+    if (nrow(df) == 0 || !"Type" %in% colnames(df) || !"Area" %in% colnames(df)) {
+      return(valueBox("NA", subtitle = "CV injection (FAME)", color = "aqua"))
+    }
+    df <- df %>% filter(Type == "FAME")
+    if (nrow(df) == 0 || all(is.na(df$Area))) {
+      return(valueBox("NA", subtitle = "CV injection (FAME)", color = "aqua"))
+    }
     cv <- round(sd(df$Area, na.rm = TRUE) / mean(df$Area, na.rm = TRUE) * 100, 1)
     box_color <- if (cv < 10) "green" else "orange"
     valueBox(cv, subtitle = "CV injection (FAME)", color = box_color)
   })
+  
   output$cvBoxInterne <- renderValueBox({
     df <- filtered_data()
+    if (nrow(df) == 0 || !"Type" %in% colnames(df) || !"CV" %in% colnames(df)) {
+      return(valueBox("NA", subtitle = "CV extraction (Étalon)", color = "aqua"))
+    }
     df_etalon <- df %>% filter(Type == "Étalon Interne")
-    
     if (nrow(df_etalon) == 0 || all(is.na(df_etalon$CV))) {
       return(valueBox("NA", subtitle = "CV extraction (Étalon)", color = "aqua"))
     }
-    
     cv_moyen <- round(mean(df_etalon$CV, na.rm = TRUE), 1)
     box_color <- if (cv_moyen < 30) "green" else "orange"
-    
     valueBox(cv_moyen, subtitle = "CV extraction (Étalon)", color = box_color)
   })
+  
+  
+  # output$cvBoxInterne <- renderValueBox({
+  #   df <- filtered_data()
+  #   df_etalon <- df %>% filter(Type == "Étalon Interne")
+  #   
+  #   if (nrow(df_etalon) == 0 || all(is.na(df_etalon$CV))) {
+  #     return(valueBox("NA", subtitle = "CV extraction (Étalon)", color = "aqua"))
+  #   }
+  #   
+  #   cv_moyen <- round(mean(df_etalon$CV, na.rm = TRUE), 1)
+  #   box_color <- if (cv_moyen < 30) "green" else "orange"
+  #   
+  #   valueBox(cv_moyen, subtitle = "CV extraction (Étalon)", color = box_color)
+  # })
   
   
   
