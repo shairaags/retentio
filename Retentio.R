@@ -159,7 +159,6 @@ server <- function(input, output, session) {
                       choices = NULL, multiple = TRUE, selected = NULL,
                       options = list(`actions-box` = TRUE, `live-search` = TRUE))
         ),
-        checkboxInput("flag_only", "Voir uniquement les anomalies", value = FALSE),
         
         
         tags$hr(),
@@ -534,6 +533,9 @@ server <- function(input, output, session) {
     req(data_reactive(), input$analyte)
     df <- data_reactive()
     
+    # Sécurité si data n'a pas de colonne Date (cas fichier résumé)
+    if (!"Date" %in% colnames(df)) return(tibble())
+    
     df <- df %>% filter(str_to_lower(Compound) == str_to_lower(input$analyte))
     
     if (input$flag_only) df <- df %>% filter(Flagged)
@@ -807,22 +809,22 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
   
-  output$multiAreaPlot2 <- renderPlotly({
-    req(input$multi_analytes2)
-    df <- data_reactive() %>%
-      filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
-      arrange(Date)
-    
-    if (nrow(df) == 0) return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = "Aucune donnée à afficher"))
-    
-    p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
-      geom_line() + geom_point() +
-      theme_minimal() +
-      labs(title = "Cinétique des Aires", y = "Area", x = "Date") +
-      theme(legend.position = "bottom")
-    
-    ggplotly(p)
-  })
+  # output$multiAreaPlot2 <- renderPlotly({
+  #   req(input$multi_analytes2)
+  #   df <- data_reactive() %>%
+  #     filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
+  #     arrange(Date)
+  #   
+  #   if (nrow(df) == 0) return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = "Aucune donnée à afficher"))
+  #   
+  #   p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+  #     geom_line() + geom_point() +
+  #     theme_minimal() +
+  #     labs(title = "Cinétique des Aires", y = "Area", x = "Date") +
+  #     theme(legend.position = "bottom")
+  #   
+  #   ggplotly(p)
+  # })
   
   
   output$cvBoxFAME2 <- renderValueBox({
@@ -879,43 +881,72 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
   
-  output$multiAreaPlot2 <- renderPlotly({
-  req(data_reactive_2(), nrow(data_reactive_2()) > 0)
-  req(input$multi_analytes2)
+#   output$multiAreaPlot2 <- renderPlotly({
+#   req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+#   req(input$multi_analytes2)
+# 
+#   df <- data_reactive_2() %>%
+#     filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
+#     arrange(Date)
+# 
+#   if (nrow(df) == 0) return(NULL)
+# 
+#   # ✅ Moyenne globale
+#   global_mean <- mean(df$Area, na.rm = TRUE)
+#   lim_min <- global_mean / 5
+#   lim_max <- global_mean * 5
+# 
+#   # ✅ Flag pour CV > 30%
+#   df <- df %>%
+#     mutate(Flag_CV = ifelse(is.na(CV), FALSE, CV > 30))
+# 
+#   # 🎨 Graphique ggplot
+#   p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+#     geom_line() +
+#     geom_point(aes(shape = Flag_CV), size = 2) +
+#     scale_shape_manual(values = c("FALSE" = 16, "TRUE" = 17)) +  # cercle vs triangle
+#     geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
+#     geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
+#     geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
+#     annotate("text", x = max(df$Date), y = global_mean, label = "Moyenne", hjust = 1.1, color = "black", size = 3) +
+#     annotate("text", x = max(df$Date), y = lim_max, label = "+5×", hjust = 1.1, color = "red", size = 3) +
+#     annotate("text", x = max(df$Date), y = lim_min, label = "÷5", hjust = 1.1, color = "red", size = 3) +
+#     theme_minimal() +
+#     labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
+#     theme(legend.position = "bottom")
+# 
+#   ggplotly(p)
+# })
 
-  df <- data_reactive_2() %>%
-    filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
-    arrange(Date)
-
-  if (nrow(df) == 0) return(NULL)
-
-  # ✅ Moyenne globale
-  global_mean <- mean(df$Area, na.rm = TRUE)
-  lim_min <- global_mean / 5
-  lim_max <- global_mean * 5
-
-  # ✅ Flag pour CV > 30%
-  df <- df %>%
-    mutate(Flag_CV = ifelse(is.na(CV), FALSE, CV > 30))
-
-  # 🎨 Graphique ggplot
-  p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
-    geom_line() +
-    geom_point(aes(shape = Flag_CV), size = 2) +
-    scale_shape_manual(values = c("FALSE" = 16, "TRUE" = 17)) +  # cercle vs triangle
-    geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
-    geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
-    geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
-    annotate("text", x = max(df$Date), y = global_mean, label = "Moyenne", hjust = 1.1, color = "black", size = 3) +
-    annotate("text", x = max(df$Date), y = lim_max, label = "+5×", hjust = 1.1, color = "red", size = 3) +
-    annotate("text", x = max(df$Date), y = lim_min, label = "÷5", hjust = 1.1, color = "red", size = 3) +
-    theme_minimal() +
-    labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
-    theme(legend.position = "bottom")
-
-  ggplotly(p)
-})
-
+  
+  # output$multiAreaPlot2 <- renderPlotly({
+  #   req(data_reactive_2(), nrow(data_reactive_2()) > 0)
+  #   req(input$multi_analytes2)
+  #   
+  #   df <- data_reactive_2() %>%
+  #     filter(Compound %in% input$multi_analytes2, !is.na(Date), !is.na(Area)) %>%
+  #     arrange(Date)
+  #   
+  #   if (nrow(df) == 0) return(NULL)
+  #   
+  #   # ✅ Moyenne globale toutes valeurs confondues
+  #   global_mean <- mean(df$Area, na.rm = TRUE)
+  #   lim_min <- global_mean / 5
+  #   lim_max <- global_mean * 5
+  #   
+  #   # 🎨 Courbe
+  #   p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+  #     geom_line() +
+  #     geom_point() +
+  #     geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
+  #     geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
+  #     geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
+  #     theme_minimal() +
+  #     labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
+  #     theme(legend.position = "bottom")
+  #   
+  #   ggplotly(p)
+  # })
   
   output$multiAreaPlot2 <- renderPlotly({
     req(data_reactive_2(), nrow(data_reactive_2()) > 0)
@@ -932,19 +963,24 @@ server <- function(input, output, session) {
     lim_min <- global_mean / 5
     lim_max <- global_mean * 5
     
-    # 🎨 Courbe
+    df <- df %>%
+      mutate(HorsSeuil = Area < lim_min | Area > lim_max)
+    
+    # 🎨 Courbe avec notation scientifique
     p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
       geom_line() +
       geom_point() +
       geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
       geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
       geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
+      scale_y_continuous(labels = scales::scientific) +  # 👈 notation scientifique ici
       theme_minimal() +
       labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
       theme(legend.position = "bottom")
     
     ggplotly(p)
   })
+  
   
   
   
@@ -1008,6 +1044,60 @@ server <- function(input, output, session) {
     }
   })
   
+  output$validation_area_summary <- renderText({
+    req(input$file_upload2, input$analyte2)
+    
+    filepath <- input$file_upload2$datapath[1]
+    df_raw <- read_csv2(filepath, show_col_types = FALSE)
+    
+    # Extraction uniquement des Area_
+    area_cols <- grep("^Area_", names(df_raw), value = TRUE)
+    if (length(area_cols) == 0) return("❌ Colonnes Area_ non détectées.")
+    
+    df <- df_raw %>%
+      filter(Compound == input$analyte2) %>%
+      select(Compound, all_of(area_cols)) %>%
+      pivot_longer(-Compound, names_to = "Measure", values_to = "Area") %>%
+      mutate(
+        Date = str_extract(Measure, "\\d{4}-\\d{2}-\\d{2}"),
+        Date = as.Date(Date),
+        Area = as.numeric(str_replace(as.character(Area), ",", "."))
+      ) %>%
+      filter(!is.na(Area))
+    
+    if (nrow(df) == 0) return("❌ Aucune aire disponible pour ce composé.")
+    
+    global_mean <- mean(df$Area, na.rm = TRUE)
+    seuil_haut <- global_mean * 5
+    seuil_bas <- global_mean / 5
+    
+    df <- df %>%
+      mutate(HorsSeuil = Area > seuil_haut | Area < seuil_bas)
+    
+    n_total <- nrow(df)
+    n_hors_seuil <- sum(df$HorsSeuil)
+    pct <- round(100 * n_hors_seuil / n_total, 1)
+    
+    dates_concernees <- df %>%
+      filter(HorsSeuil) %>%
+      pull(Date) %>%
+      unique() %>%
+      format("%Y-%m-%d")
+    
+    txt <- paste0(
+      "🔍 Validation Aire par Date\n",
+      "Total de points : ", n_total, "\n",
+      "Points hors-seuil : ", n_hors_seuil, " (", pct, "%)\n",
+      if (pct > 20) "⚠️ Proportion élevée de points hors seuil.\n" else "✅ Proportion acceptable.\n",
+      "Dates concernées :\n",
+      paste0("- ", dates_concernees, collapse = "\n")
+    )
+    
+    return(txt)
+  })
+  
+  
+  
   output$validation_area_multi <- renderText({
     req(data_reactive_2(), input$multi_analytes2)
     
@@ -1027,6 +1117,12 @@ server <- function(input, output, session) {
     n_hors_seuil <- sum(df$HorsSeuil, na.rm = TRUE)
     pct <- round(n_hors_seuil / n_total * 100, 1)
     
+    dates_concernees <- df %>%
+      filter(HorsSeuil) %>%
+      pull(Date) %>%
+      unique() %>%
+      format("%Y-%m-%d")
+    
     composés_hors <- df %>% filter(HorsSeuil) %>%
       distinct(Compound) %>% pull(Compound)
     
@@ -1035,8 +1131,8 @@ server <- function(input, output, session) {
       "Total de points : ", n_total, "\n",
       "Points hors-seuil : ", n_hors_seuil, " (", pct, "%)\n",
       if (pct > 20) "⚠️ Plus de 20 % des points sont hors-seuil\n" else "✅ Proportion acceptable\n",
-      "Composés concernés :\n",
-      paste0("- ", composés_hors, collapse = "\n")
+      "Composés concernés :\n", paste0("- ", composés_hors, collapse = "\n"), "\n",
+      "Dates concernées :\n", paste0("- ", dates_concernees, collapse = "\n")
     )
     
     return(txt)
@@ -1148,23 +1244,19 @@ server <- function(input, output, session) {
       layout(yaxis = list(title = "Aire"))
   })
   
-  
   output$trendPlot2 <- renderPlotly({
     req(input$file_upload2)
     
-    # 🔍 Lecture brute du fichier chargé (comme le user l’a fourni)
     filepath <- input$file_upload2$datapath[1]
     df_raw <- read_csv2(filepath, show_col_types = FALSE)
     
-    # Vérifie la présence de colonnes Max_
     max_cols <- grep("^Max_", names(df_raw), value = TRUE)
     if (length(max_cols) == 0) {
-      return(plotly_empty() %>% layout(title = "❌ Les colonnes Max_ n'ont pas été détectées, vérifie l'encodage ou le séparateur CSV."))
+      return(plotly_empty() %>% layout(title = "❌ Les colonnes Max_ n'ont pas été détectées."))
     }
     
-    # ⚙️ Long format Min / Max / Moyenne
     df_long <- df_raw %>%
-      filter(Compound == input$analyte2) %>%  # ⬅️ FILTRAGE ajouté ici
+      filter(Compound == input$analyte2) %>%
       pivot_longer(cols = -Compound, names_to = "Measure", values_to = "Value") %>%
       mutate(
         Stat = case_when(
@@ -1180,37 +1272,35 @@ server <- function(input, output, session) {
         Date = as.Date(Date),
         Date = factor(Date, levels = sort(unique(Date))),
         Value = as.numeric(str_replace(as.character(Value), ",", "."))
-      ) %>%      # ✅ ici le pipe est bien relié à la suite
-      arrange(Compound, Stat, Date)  # 🔁 tri chronologique réel
+      ) %>%
+      arrange(Compound, Stat, Date)
     
-    df_long$Date <- as.Date(df_long$Date)
+    mean_global <- mean(df_long$Value[df_long$Stat == "Moyenne"], na.rm = TRUE)
+    seuil_haut <- mean_global * 5
+    seuil_bas <- mean_global / 5
     
-    
-  
-    
-    # 📈 Plotly
     plot_ly(df_long, x = ~Date, y = ~Value, color = ~Stat, type = "scatter", mode = "lines+markers") %>%
-      
       layout(
         title = "Tendances Min / Max / Moyenne des aires",
         xaxis = list(title = "Date"),
-        yaxis = list(title = "Aire"),
-        legend = list(orientation = "h", x = 0.1, y = 1.1),
+        yaxis = list(
+          title = "Aire",
+          tickformat = ".1e"  # notation scientifique
+        ),
         shapes = list(
-          list(
-            type = "line",
-            x0 = min(df_long$Date, na.rm = TRUE),
-            x1 = max(df_long$Date, na.rm = TRUE),
-            y0 = mean(df_long$Value[df_long$Stat == "Moyenne"], na.rm = TRUE),
-            y1 = mean(df_long$Value[df_long$Stat == "Moyenne"], na.rm = TRUE),
-            line = list(dash = "dash", color = "red"),
-            xref = "x",
-            yref = "y"
-          )
+          list(type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = mean_global, y1 = mean_global,
+               line = list(color = "black", dash = "dash")),
+          list(type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = seuil_bas, y1 = seuil_bas,
+               line = list(color = "red", dash = "dash")),
+          list(type = "line", x0 = 0, x1 = 1, xref = "paper", y0 = seuil_haut, y1 = seuil_haut,
+               line = list(color = "red", dash = "dash"))
         )
       )
-    
   })
+  
+  
+  
+  
   
   # Fonction pour enregistrer le plot Aire log10 en PNG
   output$download_area_plot <- downloadHandler(
@@ -1308,7 +1398,9 @@ server <- function(input, output, session) {
     "Bureau" = "C:/Users/Masspeclab/Desktop",
     "Documents" = "C:/Users/Masspeclab/Documents"
   )
-  shinyDirChoose(input, "dir", roots = volumes, session = session)
+  shinyDirChoose(input, "dir_tenax", roots = volumes, session = session)
+  shinyDirChoose(input, "dir_tubes", roots = volumes, session = session)
+  # shinyDirChoose(input, "dir", roots = volumes, session = session)
   
   observeEvent(input$dir, {
     dir_path <- parseDirPath(volumes, input$dir)
@@ -1409,6 +1501,37 @@ server <- function(input, output, session) {
           showNotification("✅ Données Tenax prêtes au téléchargement.", type = "message")
         }
       )
+      
+      
+      
+      # 📦 Synchronisation automatique avec suivi par tube
+      files_qc <- list.files(dir_path, pattern = "^QC_.*\\.csv$", full.names = TRUE)
+      
+      if (length(files_qc) > 0) {
+        df_all <- purrr::map_dfr(files_qc, function(f) {
+          df <- read_csv(f, show_col_types = FALSE)
+          df %>%
+            filter(!is.na(Area)) %>%
+            mutate(
+              Compound = as.character(Name),
+              Area = as.numeric(Area),
+              Sample = as.character(Sample),
+              File = basename(f),
+              TubeID = str_extract(basename(f), "QC_\\d+"),
+              Date = as.Date(str_extract(basename(f), "\\d{8}"), "%d%m%Y")
+            )
+        })
+        
+        tube_raw_data(df_all)
+        tube_available_ids(unique(df_all$TubeID))
+        showNotification("🔁 Données QC synchronisées pour le suivi par tube", type = "message")
+      }
+      
+      # Synchronisation automatique du dossier des tubes
+      updateDirInput(session, "dir_tubes", value = normalizePath(dir_path))
+      
+      
+      
     })
   })
   
@@ -1795,7 +1918,13 @@ server <- function(input, output, session) {
                         verbatimTextOutput("sequence_validation_cv")
                ),  # 👈 fermeture de ce premier tabPanel ici !
                
-               tabPanel("Aires par Date📉", plotlyOutput("trendPlot2")),
+               tabPanel("Aires par Date📉",
+                        plotlyOutput("trendPlot2"),
+                        tags$br(),
+                        verbatimTextOutput("validation_area_summary")
+               ),
+               
+               
                
                tabPanel("Cinétiques multi-composés📊",
                         downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
@@ -1979,6 +2108,8 @@ server <- function(input, output, session) {
     # Si données valides → on les stocke dans le reactive
     df_flagged <- if ("RT" %in% names(full_data)) flag_anomalies(full_data) else full_data
     data_reactive(df_flagged)
+    data_reactive_1(df_flagged)
+    
     
     updatePickerInput(session, "sequence", choices = sort(unique(df_flagged$Sequence)))
     updatePickerInput(session, "type", selected = "Tous")  # valeurs fixes déjà dans choices
@@ -1992,6 +2123,11 @@ server <- function(input, output, session) {
     showNotification("✅ Fichiers Tenax chargés avec succès !", type = "message")
   })
   
+  updateDirInput <- function(session, inputId, value) {
+    session$sendInputMessage(inputId, list(value = value))
+  }
+  
+  
   
 }
 
@@ -1999,4 +2135,4 @@ server <- function(input, output, session) {
 # ---- APP ----
 shinyApp(ui, server)
 
-#09:44 20/05/2025
+#22/05/2025
