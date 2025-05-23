@@ -1056,20 +1056,47 @@ server <- function(input, output, session) {
     df <- df %>%
       mutate(HorsSeuil = Area < lim_min | Area > lim_max)
     
-    # 🎨 Courbe avec notation scientifique
-    p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
-      geom_line() +
-      geom_point() +
-      geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
-      geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
-      geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
-      scale_y_continuous(labels = scales::scientific) +  # 👈 notation scientifique ici
-      theme_minimal() +
-      labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
-      theme(legend.position = "bottom")
+    if (length(input$multi_analytes2) == 1) {
+      # Afficher les seuils uniquement si 1 composé sélectionné
+      p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+        geom_line() +
+        geom_point() +
+        geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
+        geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
+        geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
+        scale_y_continuous(labels = scales::scientific) +
+        theme_minimal() +
+        labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
+        theme(legend.position = "bottom")
+    } else {
+      # Ne pas afficher les seuils
+      p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+        geom_line() +
+        geom_point() +
+        scale_y_continuous(labels = scales::scientific) +
+        theme_minimal() +
+        labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
+        theme(legend.position = "bottom")
+    }
     
     ggplotly(p)
   })
+  
+    
+  #   # 🎨 Courbe avec notation scientifique
+  #   p <- ggplot(df, aes(x = Date, y = Area, color = Compound)) +
+  #     geom_line() +
+  #     geom_point() +
+  #     geom_hline(yintercept = global_mean, linetype = "dashed", color = "black", size = 1) +
+  #     geom_hline(yintercept = lim_min, linetype = "dashed", color = "red", size = 1) +
+  #     geom_hline(yintercept = lim_max, linetype = "dashed", color = "red", size = 1) +
+  #     scale_y_continuous(labels = scales::scientific) +  # 👈 notation scientifique ici
+  #     theme_minimal() +
+  #     labs(title = "Cinétique des Aires", y = "Aire", x = "Date") +
+  #     theme(legend.position = "bottom")
+  #   
+  #   ggplotly(p)
+  # })
   
   
   
@@ -1980,8 +2007,6 @@ server <- function(input, output, session) {
     
   })
   
-  
-  
   output$retentio2_ui <- renderUI({
     tagList(
       fluidRow(
@@ -1993,46 +2018,48 @@ server <- function(input, output, session) {
       ),
       
       fluidRow(
-        box(title = "Fichiers chargés", width = 12,
-            verbatimTextOutput("loadedFiles2"),
-            verbatimTextOutput("data_summary2"))
-      ),
-      
-      
-      
-      fluidRow(
-        tabBox(title = "Visualisation", width = 12,
-               tabPanel("CV% par séquence📉",
-                        plotlyOutput("CVPlot_time2"),
-                        tags$br(),
-                        verbatimTextOutput("sequence_validation_cv")
-               ),  # 👈 fermeture de ce premier tabPanel ici !
-               
-               tabPanel("Aires par Date📉",
-                        plotlyOutput("trendPlot2"),
-                        tags$br(),
-                        verbatimTextOutput("validation_area_summary")
-               ),
-               
-               
-               
-               tabPanel("Cinétiques multi-composés📊",
-                        downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
-                        downloadButton("download_area_plot2", "Télécharger Aire (log10) PNG"),
-                        plotlyOutput("multiCVPlot2"),
-                        tags$br(),
-                        verbatimTextOutput("sequence_validation_multi"),
-                        plotlyOutput("multiAreaPlot2"),
-                        tags$br(),
-                        verbatimTextOutput("validation_area_multi")
-               )
-               
+        box(
+          title = "Fichiers chargés", width = 12,
+          verbatimTextOutput("loadedFiles2"),
+          verbatimTextOutput("data_summary2")
         )
       ),
       
+      fluidRow(
+        tabBox(
+          title = "Visualisation", width = 12,
+          
+          tabPanel("CV% par séquence📉",
+                   plotlyOutput("CVPlot_time2"),
+                   tags$br(),
+                   verbatimTextOutput("sequence_validation_cv")
+          ),
+          
+          tabPanel("Aires par Date📉",
+                   plotlyOutput("trendPlot2"),
+                   tags$br(),
+                   verbatimTextOutput("validation_area_summary")
+          ),
+          
+          tabPanel("Cinétiques multi-composés📊",
+                   downloadButton("download_cv_plot2", "Télécharger CV (%) PNG"),
+                   downloadButton("download_area_plot2", "Télécharger Aire (log10) PNG"),
+                   plotlyOutput("multiCVPlot2"),
+                   tags$br(),
+                   verbatimTextOutput("sequence_validation_multi"),
+                   plotlyOutput("multiAreaPlot2"),
+                   tags$br(),
+                   conditionalPanel(
+                     condition = "input.multi_analytes2.length > 1",
+                     helpText("📌 Pour voir les seuils ±5× et la validation, sélectionnez un seul composé.")
+                   )
+          )
+        )
+      ),
       
-      
-      fluidRow(box(title = "Données filtrées", width = 12, DTOutput("dataTable2"))),
+      fluidRow(
+        box(title = "Données filtrées", width = 12, DTOutput("dataTable2"))
+      ),
       
       fluidRow(
         downloadButton("downloadCSV2", "Télécharger CSV nettoyé"),
@@ -2041,6 +2068,10 @@ server <- function(input, output, session) {
       )
     )
   })
+  
+
+  
+
   
   observeEvent(input$file_upload_combined, {
     req(input$file_upload_combined)
